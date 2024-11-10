@@ -8,6 +8,17 @@ export type Barangay = {
 	phone: string;
 	latitude: string;
 	longitude: string;
+	households?: Household[];
+};
+
+export type Household = {
+	_id: string;
+	fullName: string;
+	gender: string;
+	dateOfBirth: string;
+	age: number;
+	phone: string;
+	dependents: number;
 };
 
 export type User = {

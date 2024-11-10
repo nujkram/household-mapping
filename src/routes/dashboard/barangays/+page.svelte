@@ -45,7 +45,7 @@
 	drawerStore.close();
 
 	$: isReady = data !== undefined;
-	$: if(data?.barangays) barangayStore.set(data.barangays);
+	$: if (data?.barangays) barangayStore.set(data.barangays);
 </script>
 
 <div class="card mb-4">
@@ -68,7 +68,7 @@
 </div>
 {#if isReady}
 	{#key $barangayStore}
-		<TableBarangay data={$barangayStore} handleClickView={handleClickView} handleClickUpdate={handleClickUpdate} />
+		<TableBarangay data={$barangayStore} {handleClickView} {handleClickUpdate} />
 	{/key}
 {:else}
 	<table class="table">
@@ -95,6 +95,6 @@
 	{#if $drawerStore.id === 'create'}
 		<Create {drawerStore} />
 	{:else if $drawerStore.id === 'update'}
-		<Update data={selectedItem} {drawerStore} moduleName="barangays" />
+		<Update data={selectedItem} {drawerStore} />
 	{/if}
 </Drawer>

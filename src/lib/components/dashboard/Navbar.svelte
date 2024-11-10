@@ -13,7 +13,6 @@
 	const handleLogout = () => {
 		goto('/auth/logout/');
 	};
-
 </script>
 
 <LightSwitch />

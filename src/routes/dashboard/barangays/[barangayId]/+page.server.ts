@@ -34,10 +34,18 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 				path: '$createdBy',
 				preserveNullAndEmptyArrays: true
 			}
+		},
+		{
+			$lookup: {
+				from: 'households',
+				localField: '_id',
+				foreignField: 'barangayId',
+				as: 'households'
+			}
 		}
 	];
 
 	const [barangayDetail] = await Barangay.aggregate(pipeline).toArray();
 
-	return { barangayDetail };
+	return { barangayDetail, user: locals.user };
 };

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/stores';
 	import '../app.postcss';
-	import { AppShell, AppBar, initializeStores } from '@skeletonlabs/skeleton';
+	import { AppShell, AppBar, initializeStores, Toast } from '@skeletonlabs/skeleton';
 
 	// Highlight JS
 	import hljs from 'highlight.js/lib/core';
@@ -53,3 +53,4 @@
 		<slot />
 	</div>
 </AppShell>
+<Toast />

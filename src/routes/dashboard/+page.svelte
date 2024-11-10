@@ -1,6 +1,9 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import type { Barangay } from '$lib/utils/types';
+	import { loadGoogleMaps } from '$lib/utils/googleMaps';
+	import { showToast } from '$lib/utils/toastHelper';
+	import { getToastStore } from '@skeletonlabs/skeleton';
 	export let data;
 	let { user } = data;
 
@@ -9,13 +12,16 @@
 	let markers: google.maps.Marker[] = [];
 	let barangays: Barangay[] = [];
 
+	// toast settings
+	const toastStore = getToastStore();
+
 	const initMap = (): void => {
-		// Center the map on a default location (you can adjust these coordinates)
 		const defaultLocation = { lat: 11.442339253918387, lng: 122.69376754760742 };
 
 		map = new google.maps.Map(mapElement, {
 			center: defaultLocation,
-			zoom: 12
+			zoom: 12,
+			mapId: import.meta.env.VITE_GOOGLE_MAPS_ID
 		});
 
 		// Add markers for each barangay
@@ -23,25 +29,21 @@
 			const lat = parseFloat(barangay.latitude);
 			const lng = parseFloat(barangay.longitude);
 
-			const marker = new google.maps.Marker({
+			const marker = new google.maps.marker.AdvancedMarkerElement({
 				position: { lat, lng },
-				map: map,
+				map,
 				title: barangay.name
 			});
 
-			// Add info window for each marker
 			const infoWindow = new google.maps.InfoWindow({
-				content: `
-					<div class="p-2 text-black">
-						<h3 class="font-bold">${barangay.name}</h3>
-						<p>Captain: ${barangay.fullName}</p>
-						<p>Contact: ${barangay.phone}</p>
-					</div>
-				`
+				content: `<div class="w-[200px]"><h3 class="text-gray-800">${barangay.name}</h3></div>`
 			});
 
 			marker.addListener('click', () => {
-				infoWindow.open(map, marker);
+				infoWindow.open({
+					anchor: marker,
+					map
+				});
 			});
 
 			markers.push(marker);
@@ -55,16 +57,16 @@
 			const result = await response.json();
 			barangays = result.response;
 
-			// Load Google Maps script
-			const script = document.createElement('script');
-			script.src = `https://maps.googleapis.com/maps/api/js?key=${import.meta.env.VITE_GOOGLE_MAPS_API_KEY}&callback=initMap`;
-			script.async = true;
-			script.defer = true;
-			document.head.appendChild(script);
+			const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+			if (!apiKey) {
+				showToast(toastStore, 'Google Maps API key is missing', false);
+				return;
+			}
 
-			// @ts-ignore
-			window.initMap = initMap;
+			await loadGoogleMaps(apiKey, ['marker', 'advanced-markers']);
+			initMap();
 		} catch (error) {
+			showToast(toastStore, 'Error loading map', false);
 			console.error('Error loading map:', error);
 		}
 	});

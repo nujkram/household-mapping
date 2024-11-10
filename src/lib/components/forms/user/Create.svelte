@@ -64,7 +64,7 @@
 					password: hashedPassword,
 					email: email,
 					phone: phone,
-					role: role,
+					role: role
 				})
 			});
 

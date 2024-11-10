@@ -1,9 +1,9 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { focusTrap, type DrawerStore, getToastStore } from '@skeletonlabs/skeleton';
-	import type { ToastSettings } from '@skeletonlabs/skeleton';
 	import { showToast } from '$lib/utils/toastHelper';
 	import { barangayStore } from '$lib/stores/barangayStore';
+	import { loadGoogleMaps } from '$lib/utils/googleMaps';
 
 	export let drawerStore: DrawerStore;
 
@@ -17,23 +17,24 @@
 	let longitude: string;
 
 	let map: google.maps.Map;
-	let marker: google.maps.Marker;
+	let marker: google.maps.marker.AdvancedMarkerElement;
 
 	// toast settings
 	const toastStore = getToastStore();
 
-	onMount(() => {
+	onMount(async () => {
 		const initMap = (): void => {
-			const defaultLocation = { lat: 11.442339253918387, lng: 122.69376754760742 }; // Manila, Philippines
+			const defaultLocation = { lat: 11.442339253918387, lng: 122.69376754760742 };
 			map = new google.maps.Map(document.getElementById('map') as HTMLElement, {
 				center: defaultLocation,
-				zoom: 13
+				zoom: 13,
+				mapId: import.meta.env.VITE_GOOGLE_MAPS_ID
 			});
 
-			marker = new google.maps.Marker({
+			marker = new google.maps.marker.AdvancedMarkerElement({
 				position: defaultLocation,
-				map: map,
-				draggable: true
+				map,
+				gmpDraggable: true
 			});
 
 			google.maps.event.addListener(marker, 'dragend', () => {
@@ -54,21 +55,18 @@
 		};
 
 		const apiKey: string = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
-		let mapError = '';
 		if (!apiKey) {
-			mapError = 'Google Maps API key is missing. Please check your .env file.';
-			showToast(toastStore, mapError, true);
+			showToast(toastStore, 'Google Maps API key is missing. Please check your .env file.', true);
 			return;
 		}
 
-		const script: HTMLScriptElement = document.createElement('script');
-		script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&callback=initMap`;
-		script.async = true;
-		script.defer = true;
-		document.head.appendChild(script);
-
-		// @ts-ignore
-		window.initMap = initMap;
+		try {
+			await loadGoogleMaps(apiKey);
+			initMap();
+		} catch (error) {
+			showToast(toastStore, 'Failed to load Google Maps', false);
+			console.error(error);
+		}
 	});
 
 	// ... rest of the script ...
@@ -77,7 +75,7 @@
 <form
 	method="POST"
 	autocomplete="off"
-	class="p-6"
+	class="p-6 space-y-4"
 	use:focusTrap={isFocused}
 	on:submit|preventDefault={async (event) => {
 		try {
@@ -114,8 +112,8 @@
 		<div id="map" class="h-[300px] w-full"></div>
 	</div>
 
-	<label class="block mb-4">
-		<span class="text-gray-700">Name</span>
+	<label class="label">
+		<span>Name</span>
 		<input
 			class="input"
 			type="text"
@@ -126,8 +124,8 @@
 		/>
 	</label>
 
-	<label class="block mb-4">
-		<span class="text-gray-700">First Name</span>
+	<label class="label">
+		<span>First Name</span>
 		<input
 			class="input"
 			type="text"
@@ -138,8 +136,8 @@
 		/>
 	</label>
 
-	<label class="block mb-4">
-		<span class="text-gray-700">Middle Name</span>
+	<label class="label">
+		<span>Middle Name</span>
 		<input
 			class="input"
 			type="text"
@@ -150,8 +148,8 @@
 		/>
 	</label>
 
-	<label class="block mb-4">
-		<span class="text-gray-700">Last Name</span>
+	<label class="label">
+		<span>Last Name</span>
 		<input
 			class="input"
 			type="text"
@@ -162,8 +160,8 @@
 		/>
 	</label>
 
-	<label class="block mb-4">
-		<span class="text-gray-700">Phone</span>
+	<label class="label">
+		<span>Phone</span>
 		<input
 			class="input"
 			type="text"
@@ -174,13 +172,13 @@
 		/>
 	</label>
 
-	<label class="hidden mb-4">
-		<span class="text-gray-700">Latitude</span>
+	<label class="hidden label">
+		<span>Latitude</span>
 		<input class="input" type="text" name="latitude" bind:value={latitude} readonly required />
 	</label>
 
-	<label class="hidden mb-4">
-		<span class="text-gray-700">Longitude</span>
+	<label class="hidden label">
+		<span>Longitude</span>
 		<input class="input" type="text" name="longitude" bind:value={longitude} readonly required />
 	</label>
 

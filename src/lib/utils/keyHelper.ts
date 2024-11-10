@@ -7,9 +7,8 @@ export const checkKey = (data: any) => {
 			key === 'createdBy' ||
 			key === 'updatedBy' ||
 			key === 'image' ||
-			key === 'categoryId' ||
 			key === 'userId' ||
-			key === 'judgeId'
+			key === 'barangayId'
 		)
 			continue;
 		if (typeof data[key] === 'string') data[key] = data[key].toUpperCase();

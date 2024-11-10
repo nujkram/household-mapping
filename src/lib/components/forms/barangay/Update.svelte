@@ -2,37 +2,37 @@
 	import { onMount } from 'svelte';
 	import { focusTrap, type DrawerStore, getToastStore } from '@skeletonlabs/skeleton';
 	import { showToast } from '$lib/utils/toastHelper';
-	import { goto } from '$app/navigation';
 	import type { Barangay } from '$lib/utils/types';
 	import { barangayStore } from '$lib/stores/barangayStore';
+	import { loadGoogleMaps } from '$lib/utils/googleMaps';
 
 	export let drawerStore: DrawerStore;
-    export let data: Barangay;
-    export let moduleName: string;
+	export let data: Barangay;
 	const isFocused: boolean = true;
 
 	let map: google.maps.Map;
-	let marker: google.maps.Marker;
+	let marker: google.maps.marker.AdvancedMarkerElement;
 
 	// toast settings
 	const toastStore = getToastStore();
 
-	onMount(() => {
+	onMount(async () => {
 		const initMap = (): void => {
-			const barangayLocation = { 
-				lat: Number.parseFloat(data.latitude), 
-				lng: Number.parseFloat(data.longitude) 
+			const barangayLocation = {
+				lat: Number.parseFloat(data.latitude),
+				lng: Number.parseFloat(data.longitude)
 			};
-			
+
 			map = new google.maps.Map(document.getElementById('map') as HTMLElement, {
 				center: barangayLocation,
-				zoom: 13
+				zoom: 13,
+				mapId: import.meta.env.VITE_GOOGLE_MAPS_ID
 			});
 
-			marker = new google.maps.Marker({
+			marker = new google.maps.marker.AdvancedMarkerElement({
 				position: barangayLocation,
-				map: map,
-				draggable: true
+				map,
+				gmpDraggable: true
 			});
 
 			google.maps.event.addListener(marker, 'dragend', () => {
@@ -58,21 +58,20 @@
 			return;
 		}
 
-		const script: HTMLScriptElement = document.createElement('script');
-		script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&callback=initMap`;
-		script.async = true;
-		script.defer = true;
-		document.head.appendChild(script);
-
-		// @ts-ignore
-		window.initMap = initMap;
+		try {
+			await loadGoogleMaps(apiKey);
+			initMap();
+		} catch (error) {
+			showToast(toastStore, 'Failed to load Google Maps', false);
+			console.error(error);
+		}
 	});
 </script>
 
 <form
 	method="POST"
 	autocomplete="off"
-	class="p-6"
+	class="p-6 space-y-4"
 	use:focusTrap={isFocused}
 	on:submit|preventDefault={async () => {
 		try {
@@ -96,7 +95,7 @@
 			const result = await response.json();
 
 			showToast(toastStore, result.message, true);
-            barangayStore.refresh();
+			barangayStore.refresh();
 			drawerStore.close();
 		} catch (error) {
 			showToast(toastStore, error.message, false);
@@ -110,7 +109,7 @@
 		<div id="map" class="h-[300px] w-full"></div>
 	</div>
 
-	<label class="label mt-4">
+	<label class="label">
 		<span>Name</span>
 		<input
 			class="input"
@@ -122,7 +121,7 @@
 		/>
 	</label>
 
-	<label class="label mt-4">
+	<label class="label">
 		<span>First Name</span>
 		<input
 			class="input"
@@ -134,7 +133,7 @@
 		/>
 	</label>
 
-	<label class="label mt-4">
+	<label class="label">
 		<span>Middle Name</span>
 		<input
 			class="input"
@@ -146,7 +145,7 @@
 		/>
 	</label>
 
-	<label class="label mt-4">
+	<label class="label">
 		<span>Last Name</span>
 		<input
 			class="input"
@@ -158,23 +157,37 @@
 		/>
 	</label>
 
-	<label class="label mt-4">
+	<label class="label">
 		<span>Phone</span>
-		<input class="input" type="text" placeholder="09171234567" name="phone" bind:value={data.phone} required />
+		<input
+			class="input"
+			type="text"
+			placeholder="09171234567"
+			name="phone"
+			bind:value={data.phone}
+			required
+		/>
 	</label>
 
-    <label class="hidden mb-4">
-		<span class="text-gray-700">Latitude</span>
+	<label class="hidden label">
+		<span>Latitude</span>
 		<input class="input" type="text" name="latitude" bind:value={data.latitude} readonly required />
 	</label>
 
-	<label class="hidden mb-4">
-		<span class="text-gray-700">Longitude</span>
-		<input class="input" type="text" name="longitude" bind:value={data.longitude} readonly required />
+	<label class="hidden label">
+		<span>Longitude</span>
+		<input
+			class="input"
+			type="text"
+			name="longitude"
+			bind:value={data.longitude}
+			readonly
+			required
+		/>
 	</label>
 
 	<div class="flex flex-row gap-2 items-center justify-end mt-4">
-        <button
+		<button
 			type="submit"
 			class="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50"
 		>
