@@ -36,7 +36,10 @@
 			});
 
 			const infoWindow = new google.maps.InfoWindow({
-				content: `<div class="w-[200px]"><h3 class="text-gray-800">${barangay.name}</h3></div>`
+				content: `<div class="w-[200px]"><h3 class="text-gray-800">${barangay.name}</h3>
+				<p class="text-gray-600">${barangay.fullName}</p>
+				<p class="text-gray-600">${barangay.phone}</p>
+				</div>`
 			});
 
 			marker.addListener('click', () => {
