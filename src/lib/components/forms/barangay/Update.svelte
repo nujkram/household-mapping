@@ -18,10 +18,25 @@
 
 	onMount(async () => {
 		const initMap = (): void => {
-			const barangayLocation = {
+			const defaultLocation = {
+				lat: 11.442339253918387,
+				lng: 122.69376754760742
+			};
+
+			let barangayLocation = {
 				lat: Number.parseFloat(data.latitude),
 				lng: Number.parseFloat(data.longitude)
 			};
+
+			// Use default location if coordinates are invalid
+			if (isNaN(barangayLocation.lat) || isNaN(barangayLocation.lng)) {
+				showToast(toastStore, 'Using default location due to invalid coordinates.', false);
+				console.warn('Invalid coordinates, using default:', data.latitude, data.longitude);
+				barangayLocation = defaultLocation;
+				// Update the data with default coordinates
+				data.latitude = defaultLocation.lat.toString();
+				data.longitude = defaultLocation.lng.toString();
+			}
 
 			map = new google.maps.Map(document.getElementById('map') as HTMLElement, {
 				center: barangayLocation,

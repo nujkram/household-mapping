@@ -2,24 +2,15 @@
 	import { onMount } from 'svelte';
 	import { focusTrap, type DrawerStore, getToastStore } from '@skeletonlabs/skeleton';
 	import { showToast } from '$lib/utils/toastHelper';
+	import type { Barangay, Household } from '$lib/utils/types';
 	import { barangayStore } from '$lib/stores/barangayStore';
-	import type { Barangay } from '$lib/utils/types';
 	import { loadGoogleMaps } from '$lib/utils/googleMaps';
 
 	export let drawerStore: DrawerStore;
-	export let data: Barangay;
+	export let data: Household;
+	export let barangay: Barangay;
 
 	const isFocused = true;
-	let lastName: string;
-	let middleName: string;
-	let firstName: string;
-	let gender: string;
-	let dateOfBirth: Date;
-	let phone: string;
-	let dependents: number;
-	let latitude: string;
-	let longitude: string;
-
 	let barangays: Barangay[] = [];
 
 	let map: google.maps.Map;
@@ -56,49 +47,48 @@
 	});
 
 	const initMap = (): void => {
-		// Ensure we have valid coordinates from the barangay data
+		// Ensure we have valid coordinates
 		let lat = Number.parseFloat(data.latitude);
 		let lng = Number.parseFloat(data.longitude);
 
 		if (isNaN(lat) || isNaN(lng)) {
-			console.warn('Invalid barangay coordinates:', data);
-			// Use a default location if barangay coordinates are invalid
-			lat = 11.442339253918387;
-			lng = 122.69376754760742;
+			console.warn('Invalid household coordinates:', data);
+			// Use barangay coordinates as fallback
+			lat = Number.parseFloat(barangay.latitude);
+			lng = Number.parseFloat(barangay.longitude);
 		}
 
-		const barangayLocation = { lat, lng };
+		const location = { lat, lng };
 
 		map = new google.maps.Map(document.getElementById('map') as HTMLElement, {
-			center: barangayLocation,
+			center: location,
 			zoom: 13,
 			mapId: import.meta.env.VITE_GOOGLE_MAPS_ID
 		});
 
-		// Create the marker with valid coordinates
 		marker = new google.maps.marker.AdvancedMarkerElement({
 			map,
-			position: barangayLocation,
+			position: location,
 			gmpDraggable: true
 		});
 
 		// Set initial latitude and longitude values
-		latitude = lat.toString();
-		longitude = lng.toString();
+		data.latitude = lat.toString();
+		data.longitude = lng.toString();
 
 		marker.addListener('dragend', () => {
 			const position = marker.position as google.maps.LatLng;
 			if (position) {
-				latitude = position.lat().toString();
-				longitude = position.lng().toString();
+				data.latitude = position.lat().toString();
+				data.longitude = position.lng().toString();
 			}
 		});
 
 		map.addListener('click', (event: google.maps.MapMouseEvent) => {
 			if (event.latLng) {
 				marker.position = event.latLng;
-				latitude = event.latLng.lat().toString();
-				longitude = event.latLng.lng().toString();
+				data.latitude = event.latLng.lat().toString();
+				data.longitude = event.latLng.lng().toString();
 			}
 		});
 	};
@@ -109,24 +99,25 @@
 	autocomplete="off"
 	class="p-6 space-y-4"
 	use:focusTrap={isFocused}
-	on:submit|preventDefault={async (event) => {
+	on:submit|preventDefault={async () => {
 		try {
-			const response = await fetch('/api/admin/household/insert', {
+			const response = await fetch('/api/admin/household/update', {
 				method: 'POST',
 				headers: {
 					'Content-Type': 'application/json'
 				},
 				body: JSON.stringify({
-					barangayId: data._id,
-					lastName,
-					middleName,
-					firstName,
-					gender,
-					dateOfBirth,
-					phone,
-					dependents,
-					latitude,
-					longitude
+					_id: data._id,
+					barangayId: barangay._id,
+					lastName: data.lastName,
+					middleName: data.middleName,
+					firstName: data.firstName,
+					gender: data.gender,
+					dateOfBirth: data.dateOfBirth,
+					phone: data.phone,
+					dependents: data.dependents,
+					latitude: data.latitude,
+					longitude: data.longitude
 				})
 			});
 
@@ -141,7 +132,7 @@
 		}
 	}}
 >
-	<h2 class="text-2xl font-bold mb-4">Create Household</h2>
+	<h2 class="text-2xl font-bold mb-4">Update Household</h2>
 
 	<div class="mb-4 border border-gray-300 rounded-lg overflow-hidden">
 		<div id="map" class="h-[300px] w-full"></div>
@@ -150,9 +141,9 @@
 	<div class="grid grid-cols-2 gap-2">
 		<label class="label">
 			<span>Barangay</span>
-			<select class="select" bind:value={data._id}>
-				{#each barangays as barangay}
-					<option value={barangay._id}>{barangay.name}</option>
+			<select class="select" bind:value={barangay._id}>
+				{#each barangays as b}
+					<option value={b._id}>{b.name}</option>
 				{/each}
 			</select>
 		</label>
@@ -164,7 +155,7 @@
 				type="text"
 				placeholder="Juan"
 				name="firstName"
-				bind:value={firstName}
+				bind:value={data.firstName}
 				required
 			/>
 		</label>
@@ -176,7 +167,7 @@
 				type="text"
 				placeholder="Alfon"
 				name="middleName"
-				bind:value={middleName}
+				bind:value={data.middleName}
 			/>
 		</label>
 
@@ -187,7 +178,7 @@
 				type="text"
 				placeholder="Dela Cruz"
 				name="lastName"
-				bind:value={lastName}
+				bind:value={data.lastName}
 				required
 			/>
 		</label>
@@ -199,38 +190,45 @@
 				type="text"
 				placeholder="09171234567"
 				name="phone"
-				bind:value={phone}
+				bind:value={data.phone}
 				required
 			/>
 		</label>
 
 		<label class="label">
 			<span>Gender</span>
-			<select class="select" bind:value={gender}>
-				<option value="male">Male</option>
-				<option value="female">Female</option>
+			<select class="select" bind:value={data.gender}>
+				<option value="MALE">Male</option>
+				<option value="FEMALE">Female</option>
 			</select>
 		</label>
 
 		<label class="label">
 			<span>Date of Birth</span>
-			<input class="input" type="date" name="dateOfBirth" bind:value={dateOfBirth} required />
+			<input class="input" type="date" name="dateOfBirth" bind:value={data.dateOfBirth} required />
 		</label>
 
 		<label class="label">
 			<span>Dependents</span>
-			<input class="input" type="number" name="dependents" bind:value={dependents} required />
+			<input class="input" type="number" name="dependents" bind:value={data.dependents} required />
 		</label>
 	</div>
 
 	<label class="hidden label">
 		<span>Latitude</span>
-		<input class="input" type="text" name="latitude" bind:value={latitude} readonly required />
+		<input class="input" type="text" name="latitude" bind:value={data.latitude} readonly required />
 	</label>
 
 	<label class="hidden label">
 		<span>Longitude</span>
-		<input class="input" type="text" name="longitude" bind:value={longitude} readonly required />
+		<input
+			class="input"
+			type="text"
+			name="longitude"
+			bind:value={data.longitude}
+			readonly
+			required
+		/>
 	</label>
 
 	<div class="flex justify-end space-x-4">
@@ -238,7 +236,7 @@
 			type="submit"
 			class="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50"
 		>
-			Submit
+			Update
 		</button>
 		<button
 			type="button"

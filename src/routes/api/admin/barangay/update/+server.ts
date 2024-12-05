@@ -2,7 +2,7 @@ import clientPromise from '$lib/server/mongo';
 import { checkKey } from '$lib/utils/keyHelper';
 
 /** @type {import('./$types').RequestHandler} */
-export const POST = async ({ request, locals }: any) => {
+export const POST: RequestHandler = async ({ request, locals }) => {
 	let data = await request.json();
 	const db = await clientPromise();
 	const Barangay = db.collection('barangays');

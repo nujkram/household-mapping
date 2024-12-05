@@ -1,6 +1,7 @@
 import { error } from '@sveltejs/kit';
 import clientPromise from '$lib/server/mongo';
 import { hashPassword } from '$lib/common/utils';
+import bcrypt from 'bcryptjs';
 
 export const POST = async ({ request, cookies }) => {
 	const { username, password } = await request.json();
@@ -11,6 +12,12 @@ export const POST = async ({ request, cookies }) => {
 	const user = await Users.findOne({ username });
 
 	if (!user) {
+		throw error(401, 'Invalid credentials');
+	}
+
+	// Verify password
+	const isValidPassword = await bcrypt.compare(password, user.services.password.bcrypt);
+	if (!isValidPassword) {
 		throw error(401, 'Invalid credentials');
 	}
 

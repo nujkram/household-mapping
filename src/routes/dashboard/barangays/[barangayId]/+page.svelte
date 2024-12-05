@@ -3,6 +3,7 @@
 	import type { DrawerSettings } from '@skeletonlabs/skeleton';
 	import Create from '$lib/components/forms/household/Create.svelte';
 	import Update from '$lib/components/forms/barangay/Update.svelte';
+	import UpdateHousehold from '$lib/components/forms/household/Update.svelte';
 	import { onMount } from 'svelte';
 	import { loadGoogleMaps } from '$lib/utils/googleMaps';
 	import { showToast } from '$lib/utils/toastHelper';
@@ -11,6 +12,7 @@
 	export let data;
 
 	const { barangayDetail } = data;
+	let selectedHousehold: Household;
 
 	// toast settings
 	const toastStore = getToastStore();
@@ -26,7 +28,15 @@
 
 	const drawerUpdate: DrawerSettings = {
 		id: 'updateBarangay',
-		width: 'w-[280px] md:w-[480px]',
+		width: 'w-[280px] md:w-full',
+		padding: 'p-4',
+		rounded: 'rounded-xl',
+		position: 'right'
+	};
+
+	const drawerUpdateHousehold: DrawerSettings = {
+		id: 'updateHousehold',
+		width: 'w-[280px] md:w-full',
 		padding: 'p-4',
 		rounded: 'rounded-xl',
 		position: 'right'
@@ -37,14 +47,15 @@
 	};
 
 	const handleClickUpdate = (item: Household) => {
-		console.log(item);
+		selectedHousehold = item;
+		drawerStore.open(drawerUpdateHousehold);
 	};
 
 	const drawerStore = getDrawerStore();
 	drawerStore.close();
 
 	let map: google.maps.Map;
-	let markers: google.maps.marker.AdvancedMarkerElement[] = [];
+	let marker: google.maps.marker.AdvancedMarkerElement;
 
 	const initMap = (): void => {
 		const mapElement = document.getElementById('barangay-map');
@@ -65,34 +76,12 @@
 				mapId: import.meta.env.VITE_GOOGLE_MAPS_ID
 			});
 
-			// Add barangay center marker
-			markers.push(
-				new google.maps.marker.AdvancedMarkerElement({
-					map,
-					position: barangayLocation,
-					title: 'Barangay Center'
-				})
-			);
-
-			// Add markers for each household
-			if (barangayDetail.households) {
-				for (const household of barangayDetail.households) {
-					if (household.latitude && household.longitude) {
-						const position = {
-							lat: Number.parseFloat(household.latitude),
-							lng: Number.parseFloat(household.longitude)
-						};
-						
-						markers.push(
-							new google.maps.marker.AdvancedMarkerElement({
-								map,
-								position,
-								title: household.name || 'Household'
-							})
-						);
-					}
-				}
-			}
+			// Add single marker for barangay center
+			marker = new google.maps.marker.AdvancedMarkerElement({
+				map,
+				position: barangayLocation,
+				title: barangayDetail.name || 'Barangay Center'
+			});
 		} catch (error) {
 			console.error('Error initializing map:', error);
 		}
@@ -186,5 +175,7 @@
 		<Create data={barangayDetail} {drawerStore} />
 	{:else if $drawerStore.id === 'updateBarangay'}
 		<Update data={barangayDetail} {drawerStore} />
+	{:else if $drawerStore.id === 'updateHousehold'}
+		<UpdateHousehold data={selectedHousehold} barangay={barangayDetail} {drawerStore} />
 	{/if}
 </Drawer>

@@ -13,12 +13,18 @@ export type Barangay = {
 
 export type Household = {
 	_id: string;
+	barangayId: string;
+	lastName: string;
+	middleName: string;
+	firstName: string;
 	fullName: string;
 	gender: string;
 	dateOfBirth: string;
 	age: number;
 	phone: string;
 	dependents: number;
+	latitude: string;
+	longitude: string;
 };
 
 export type User = {

@@ -11,11 +11,15 @@
 	let map: google.maps.Map;
 	let markers: google.maps.Marker[] = [];
 	let barangays: Barangay[] = [];
-
 	// toast settings
 	const toastStore = getToastStore();
 
 	const initMap = (): void => {
+		if (!barangays || barangays.length === 0) {
+			console.warn('No barangays data available');
+			return;
+		}
+
 		const defaultLocation = { lat: 11.442339253918387, lng: 122.69376754760742 };
 
 		map = new google.maps.Map(mapElement, {
@@ -24,32 +28,37 @@
 			mapId: import.meta.env.VITE_GOOGLE_MAPS_ID
 		});
 
-		// Add markers for each barangay
 		for (const barangay of barangays) {
 			const lat = parseFloat(barangay.latitude);
 			const lng = parseFloat(barangay.longitude);
 
-			const marker = new google.maps.marker.AdvancedMarkerElement({
-				position: { lat, lng },
-				map,
-				title: barangay.name
-			});
-
-			const infoWindow = new google.maps.InfoWindow({
-				content: `<div class="w-[200px]"><h3 class="text-gray-800">${barangay.name}</h3>
-				<p class="text-gray-600">${barangay.fullName}</p>
-				<p class="text-gray-600">${barangay.phone}</p>
-				</div>`
-			});
-
-			marker.addListener('click', () => {
-				infoWindow.open({
-					anchor: marker,
-					map
+			if (!isNaN(lat) && !isNaN(lng)) {
+				const marker = new google.maps.marker.AdvancedMarkerElement({
+					position: { lat, lng },
+					map,
+					title: barangay.name
 				});
-			});
 
-			markers.push(marker);
+				const infoWindow = new google.maps.InfoWindow({
+					content: `<div class="w-[200px]"><h3 class="text-gray-800">${barangay.name}</h3>
+					<p class="text-gray-600">${barangay.fullName}</p>
+					<p class="text-gray-600">${barangay.phone}</p>
+					</div>`
+				});
+
+				marker.addListener('click', () => {
+					infoWindow.open({
+						anchor: marker,
+						map
+					});
+				});
+
+				markers.push(marker);
+			} else {
+				console.warn(
+					`Invalid coordinates for barangay: ${barangay.name}, lat: ${barangay.latitude}, lng: ${barangay.longitude}`
+				);
+			}
 		}
 	};
 
