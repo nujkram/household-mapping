@@ -2,9 +2,10 @@
 	import { onMount } from 'svelte';
 	import { focusTrap, type DrawerStore, getToastStore } from '@skeletonlabs/skeleton';
 	import { showToast } from '$lib/utils/toastHelper';
-	import type { Barangay, Household } from '$lib/utils/types';
+	import type { Barangay, Household, Dependents } from '$lib/utils/types';
 	import { barangayStore } from '$lib/stores/barangayStore';
 	import { loadGoogleMaps } from '$lib/utils/googleMaps';
+	import { id } from '$lib/common/utils';
 
 	export let drawerStore: DrawerStore;
 	export let data: Household;
@@ -12,7 +13,7 @@
 
 	const isFocused = true;
 	let barangays: Barangay[] = [];
-
+	let dependentFields: Dependents[] = data.dependentDetails || [];
 	let map: google.maps.Map;
 	let marker: google.maps.marker.AdvancedMarkerElement;
 
@@ -51,7 +52,7 @@
 		let lat = Number.parseFloat(data.latitude);
 		let lng = Number.parseFloat(data.longitude);
 
-		if (isNaN(lat) || isNaN(lng)) {
+		if (Number.isNaN(lat) || Number.isNaN(lng)) {
 			console.warn('Invalid household coordinates:', data);
 			// Use barangay coordinates as fallback
 			lat = Number.parseFloat(barangay.latitude);
@@ -92,6 +93,46 @@
 			}
 		});
 	};
+
+	const updateDependentFullName = (dependent: Dependents, index: number) => {
+		// Convert names to uppercase
+		dependent.firstName = dependent.firstName.toUpperCase();
+		dependent.middleName = dependent.middleName?.toUpperCase() || '';
+		dependent.lastName = dependent.lastName.toUpperCase();
+		dependent.fullName = `${dependent.firstName} ${dependent.middleName} ${dependent.lastName}`
+			.trim()
+			.toUpperCase();
+	};
+
+	$: {
+		// Reset and regenerate dependent fields when dependents number changes
+		if (data.dependents) {
+			const newLength = Number.parseInt(data.dependents.toString());
+
+			// If we need more fields
+			while (dependentFields.length < newLength) {
+				dependentFields = [
+					...dependentFields,
+					{
+						_id: id(),
+						householdId: data._id,
+						firstName: '',
+						middleName: '',
+						lastName: '',
+						fullName: '',
+						dateOfBirth: '',
+						gender: 'MALE',
+						isVoter: false
+					}
+				];
+			}
+
+			// If we need fewer fields
+			if (dependentFields.length > newLength) {
+				dependentFields = dependentFields.slice(0, newLength);
+			}
+		}
+	}
 </script>
 
 <form
@@ -115,20 +156,25 @@
 					gender: data.gender,
 					dateOfBirth: data.dateOfBirth,
 					phone: data.phone,
+					isVoter: data.isVoter,
 					dependents: data.dependents,
+					dependentDetails: dependentFields,
 					latitude: data.latitude,
 					longitude: data.longitude
 				})
 			});
 
 			const result = await response.json();
+
+			// First refresh the store to get updated data with households
 			await barangayStore.refresh();
 
 			showToast(toastStore, result.message, true);
 			drawerStore.close();
 		} catch (error) {
-			showToast(toastStore, error.message, false);
-			console.error(error);
+			const err = error;
+			showToast(toastStore, err.message, false);
+			console.error(err);
 		}
 	}}
 >
@@ -208,10 +254,80 @@
 			<input class="input" type="date" name="dateOfBirth" bind:value={data.dateOfBirth} required />
 		</label>
 
+		<label class="label flex items-center gap-2">
+			<span>Is Voter</span>
+			<input class="input w-4" type="checkbox" name="isVoter" bind:checked={data.isVoter} />
+		</label>
+
 		<label class="label">
 			<span>Dependents</span>
 			<input class="input" type="number" name="dependents" bind:value={data.dependents} required />
 		</label>
+
+		{#if dependentFields.length > 0}
+			<div class="col-span-2">
+				<h3 class="h3 mb-4">Dependent Details</h3>
+				{#each dependentFields as dependent, index}
+					<div class="card p-4 mb-4">
+						<h4 class="h4 mb-2">Dependent {index + 1}</h4>
+						<div class="grid grid-cols-2 gap-2">
+							<label class="label">
+								<span>First Name</span>
+								<input
+									class="input"
+									type="text"
+									placeholder="First Name"
+									bind:value={dependent.firstName}
+									on:change={() => updateDependentFullName(dependent, index)}
+									required
+								/>
+							</label>
+
+							<label class="label">
+								<span>Middle Name</span>
+								<input
+									class="input"
+									type="text"
+									placeholder="Middle Name"
+									bind:value={dependent.middleName}
+									on:change={() => updateDependentFullName(dependent, index)}
+								/>
+							</label>
+
+							<label class="label">
+								<span>Last Name</span>
+								<input
+									class="input"
+									type="text"
+									placeholder="Last Name"
+									bind:value={dependent.lastName}
+									on:change={() => updateDependentFullName(dependent, index)}
+									required
+								/>
+							</label>
+
+							<label class="label">
+								<span>Gender</span>
+								<select class="select" bind:value={dependent.gender}>
+									<option value="MALE">Male</option>
+									<option value="FEMALE">Female</option>
+								</select>
+							</label>
+
+							<label class="label">
+								<span>Date of Birth</span>
+								<input class="input" type="date" bind:value={dependent.dateOfBirth} required />
+							</label>
+
+							<label class="label flex items-center gap-2">
+								<span>Is Voter</span>
+								<input class="input w-4" type="checkbox" bind:checked={dependent.isVoter} />
+							</label>
+						</div>
+					</div>
+				{/each}
+			</div>
+		{/if}
 	</div>
 
 	<label class="hidden label">

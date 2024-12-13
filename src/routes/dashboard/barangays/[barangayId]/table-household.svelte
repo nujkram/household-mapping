@@ -1,16 +1,14 @@
 <script lang="ts">
 	import type { Household } from '$lib/utils/types';
-	import { onMount } from 'svelte';
-	export let data: Household[];
+	import { calculateAge } from '$lib/common/utils';
+	import { barangayStore } from '$lib/stores/barangayStore';
+
+	export let data: Household[] = [];
 	export let handleClickView: (item: Household) => void;
 	export let handleClickUpdate: (item: Household) => void;
 
-	onMount(() => {
-		// Calculate age for each household member
-		for (const item of data) {
-			item.age = new Date().getFullYear() - new Date(item.dateOfBirth).getFullYear();
-		}
-	});
+	// Make the table reactive to store changes and ensure it's always an array
+	$: households = Array.isArray(data) ? data : [];
 </script>
 
 <div class="table-container">
@@ -27,12 +25,12 @@
 			</tr>
 		</thead>
 		<tbody>
-			{#each data as item, i}
+			{#each households as item, i}
 				<tr>
 					<td>{item.fullName}</td>
 					<td>{item.gender}</td>
 					<td>{item.dateOfBirth}</td>
-					<td>{item.age}</td>
+					<td>{calculateAge(item.dateOfBirth)}</td>
 					<td>{item.phone}</td>
 					<td>{item.dependents}</td>
 					<td>

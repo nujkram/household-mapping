@@ -58,9 +58,17 @@
 				}
 			});
 
+			marker.addListener('dragend', () => {
+				const position = marker.position as google.maps.LatLng;
+				if (position) {
+					data.latitude = position.lat().toString();
+					data.longitude = position.lng().toString();
+				}
+			});
+
 			map.addListener('click', (event: google.maps.MapMouseEvent) => {
-				marker.setPosition(event.latLng);
 				if (event.latLng) {
+					marker.position = event.latLng;
 					data.latitude = event.latLng.lat().toString();
 					data.longitude = event.latLng.lng().toString();
 				}
@@ -109,8 +117,16 @@
 
 			const result = await response.json();
 
+			// Update the store immediately with the new data
+			barangayStore.edit({
+				...data,
+				fullName: `${data.firstName} ${data.middleName} ${data.lastName}`
+			});
+
+			// Then refresh from server to ensure consistency
+			await barangayStore.refresh();
+
 			showToast(toastStore, result.message, true);
-			barangayStore.refresh();
 			drawerStore.close();
 		} catch (error) {
 			showToast(toastStore, error.message, false);

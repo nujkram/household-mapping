@@ -5,7 +5,24 @@ export const GET = async ({ request }: any) => {
 	const db = await clientPromise();
 	const Barangay = db.collection('barangays');
 
-	const response = await Barangay.find({ isActive: true }).sort({ createdAt: -1 }).toArray();
+	const pipeline = [
+		{
+			$match: { isActive: true }
+		},
+		{
+			$lookup: {
+				from: 'households',
+				localField: '_id',
+				foreignField: 'barangayId',
+				as: 'households'
+			}
+		},
+		{
+			$sort: { createdAt: -1 }
+		}
+	];
+
+	const response = await Barangay.aggregate(pipeline).toArray();
 
 	if (response) {
 		return new Response(

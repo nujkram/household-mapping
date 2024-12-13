@@ -3,8 +3,9 @@
 	import { focusTrap, type DrawerStore, getToastStore } from '@skeletonlabs/skeleton';
 	import { showToast } from '$lib/utils/toastHelper';
 	import { barangayStore } from '$lib/stores/barangayStore';
-	import type { Barangay } from '$lib/utils/types';
+	import type { Barangay, Dependents } from '$lib/utils/types';
 	import { loadGoogleMaps } from '$lib/utils/googleMaps';
+	import { id } from '$lib/common/utils';
 
 	export let drawerStore: DrawerStore;
 	export let data: Barangay;
@@ -13,14 +14,16 @@
 	let lastName: string;
 	let middleName: string;
 	let firstName: string;
-	let gender: string;
+	let gender: string = 'MALE';
 	let dateOfBirth: Date;
 	let phone: string;
-	let dependents: number;
+	let isVoter: boolean = false;
+	let dependents: number = 0;
 	let latitude: string;
 	let longitude: string;
 
 	let barangays: Barangay[] = [];
+	let dependentFields: Dependents[] = [];
 
 	let map: google.maps.Map;
 	let marker: google.maps.marker.AdvancedMarkerElement;
@@ -62,23 +65,21 @@
 
 		if (isNaN(lat) || isNaN(lng)) {
 			console.warn('Invalid barangay coordinates:', data);
-			// Use a default location if barangay coordinates are invalid
 			lat = 11.442339253918387;
 			lng = 122.69376754760742;
 		}
 
-		const barangayLocation = { lat, lng };
+		const location = { lat, lng };
 
 		map = new google.maps.Map(document.getElementById('map') as HTMLElement, {
-			center: barangayLocation,
+			center: location,
 			zoom: 13,
 			mapId: import.meta.env.VITE_GOOGLE_MAPS_ID
 		});
 
-		// Create the marker with valid coordinates
 		marker = new google.maps.marker.AdvancedMarkerElement({
 			map,
-			position: barangayLocation,
+			position: location,
 			gmpDraggable: true
 		});
 
@@ -102,6 +103,46 @@
 			}
 		});
 	};
+
+	const updateDependentFullName = (dependent: Dependents, index: number) => {
+		// Convert names to uppercase
+		dependent.firstName = dependent.firstName.toUpperCase();
+		dependent.middleName = dependent.middleName?.toUpperCase() || '';
+		dependent.lastName = dependent.lastName.toUpperCase();
+		dependent.fullName = `${dependent.firstName} ${dependent.middleName} ${dependent.lastName}`
+			.trim()
+			.toUpperCase();
+	};
+
+	$: {
+		// Reset and regenerate dependent fields when dependents number changes
+		if (dependents) {
+			const newLength = Number.parseInt(dependents.toString());
+
+			// If we need more fields
+			while (dependentFields.length < newLength) {
+				dependentFields = [
+					...dependentFields,
+					{
+						_id: id(),
+						householdId: '', // Will be set after household creation
+						firstName: '',
+						middleName: '',
+						lastName: '',
+						fullName: '',
+						dateOfBirth: '',
+						gender: 'MALE',
+						isVoter: false
+					}
+				];
+			}
+
+			// If we need fewer fields
+			if (dependentFields.length > newLength) {
+				dependentFields = dependentFields.slice(0, newLength);
+			}
+		}
+	}
 </script>
 
 <form
@@ -109,7 +150,7 @@
 	autocomplete="off"
 	class="p-6 space-y-4"
 	use:focusTrap={isFocused}
-	on:submit|preventDefault={async (event) => {
+	on:submit|preventDefault={async () => {
 		try {
 			const response = await fetch('/api/admin/household/insert', {
 				method: 'POST',
@@ -124,7 +165,9 @@
 					gender,
 					dateOfBirth,
 					phone,
+					isVoter,
 					dependents,
+					dependentDetails: dependentFields,
 					latitude,
 					longitude
 				})
@@ -207,8 +250,8 @@
 		<label class="label">
 			<span>Gender</span>
 			<select class="select" bind:value={gender}>
-				<option value="male">Male</option>
-				<option value="female">Female</option>
+				<option value="MALE">Male</option>
+				<option value="FEMALE">Female</option>
 			</select>
 		</label>
 
@@ -217,10 +260,80 @@
 			<input class="input" type="date" name="dateOfBirth" bind:value={dateOfBirth} required />
 		</label>
 
+		<label class="label flex items-center gap-2">
+			<span>Is Voter</span>
+			<input class="input w-4" type="checkbox" name="isVoter" bind:checked={isVoter} />
+		</label>
+
 		<label class="label">
 			<span>Dependents</span>
 			<input class="input" type="number" name="dependents" bind:value={dependents} required />
 		</label>
+
+		{#if dependentFields.length > 0}
+			<div class="col-span-2">
+				<h3 class="h3 mb-4">Dependent Details</h3>
+				{#each dependentFields as dependent, index}
+					<div class="card p-4 mb-4">
+						<h4 class="h4 mb-2">Dependent {index + 1}</h4>
+						<div class="grid grid-cols-2 gap-2">
+							<label class="label">
+								<span>First Name</span>
+								<input
+									class="input"
+									type="text"
+									placeholder="First Name"
+									bind:value={dependent.firstName}
+									on:input={() => updateDependentFullName(dependent, index)}
+									required
+								/>
+							</label>
+
+							<label class="label">
+								<span>Middle Name</span>
+								<input
+									class="input"
+									type="text"
+									placeholder="Middle Name"
+									bind:value={dependent.middleName}
+									on:input={() => updateDependentFullName(dependent, index)}
+								/>
+							</label>
+
+							<label class="label">
+								<span>Last Name</span>
+								<input
+									class="input"
+									type="text"
+									placeholder="Last Name"
+									bind:value={dependent.lastName}
+									on:input={() => updateDependentFullName(dependent, index)}
+									required
+								/>
+							</label>
+
+							<label class="label">
+								<span>Gender</span>
+								<select class="select" bind:value={dependent.gender}>
+									<option value="MALE">Male</option>
+									<option value="FEMALE">Female</option>
+								</select>
+							</label>
+
+							<label class="label">
+								<span>Date of Birth</span>
+								<input class="input" type="date" bind:value={dependent.dateOfBirth} required />
+							</label>
+
+							<label class="label flex items-center gap-2">
+								<span>Is Voter</span>
+								<input class="input w-4" type="checkbox" bind:checked={dependent.isVoter} />
+							</label>
+						</div>
+					</div>
+				{/each}
+			</div>
+		{/if}
 	</div>
 
 	<label class="hidden label">

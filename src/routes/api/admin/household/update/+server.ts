@@ -18,7 +18,10 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				firstName: data.firstName,
 				fullName: `${data.firstName} ${data.middleName} ${data.lastName}`,
 				phone: data.phone,
+				dateOfBirth: data.dateOfBirth,
 				dependents: data.dependents,
+				dependentDetails: data.dependentDetails,
+				isVoter: data.isVoter,
 				latitude: data.latitude,
 				longitude: data.longitude,
 				updatedBy: locals.user._id

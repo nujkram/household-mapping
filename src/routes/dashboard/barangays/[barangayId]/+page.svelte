@@ -9,9 +9,16 @@
 	import { showToast } from '$lib/utils/toastHelper';
 	import TableHousehold from './table-household.svelte';
 	import type { Household } from '$lib/utils/types';
-	export let data;
+	import { barangayStore } from '$lib/stores/barangayStore';
+	import { goto } from '$app/navigation';
 
-	const { barangayDetail } = data;
+	export let data;
+	const { barangayDetail: initialBarangayDetail } = data;
+
+	// Create a reactive store subscription
+	$: barangayDetail =
+		$barangayStore.find((b) => b._id === initialBarangayDetail._id) || initialBarangayDetail;
+
 	let selectedHousehold: Household;
 
 	// toast settings
@@ -43,7 +50,7 @@
 	};
 
 	const handleClickView = (item: Household) => {
-		console.log(item);
+		goto(`/dashboard/barangays/${barangayDetail._id}/${item._id}`);
 	};
 
 	const handleClickUpdate = (item: Household) => {
@@ -104,7 +111,7 @@
 	});
 </script>
 
-<div class="card p-4">
+<div class="card p-4 my-2">
 	<header class="card-header">
 		<h1 class="h1">Barangay Details</h1>
 	</header>
@@ -161,12 +168,18 @@
 	</footer>
 </div>
 
-<div class="card p-4">
+<div class="card p-4 my-2">
 	<header class="card-header">
 		<h2 class="h3">Household List</h2>
 	</header>
 	<section class="p-4">
-		<TableHousehold data={barangayDetail.households} {handleClickView} {handleClickUpdate} />
+		{#key barangayDetail}
+			<TableHousehold
+				data={barangayDetail?.households || []}
+				{handleClickView}
+				{handleClickUpdate}
+			/>
+		{/key}
 	</section>
 </div>
 

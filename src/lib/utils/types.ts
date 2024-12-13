@@ -20,9 +20,11 @@ export type Household = {
 	fullName: string;
 	gender: string;
 	dateOfBirth: string;
-	age: number;
+	age?: number;
 	phone: string;
 	dependents: number;
+	dependentDetails: Dependents[];
+	isVoter: boolean;
 	latitude: string;
 	longitude: string;
 };
@@ -32,4 +34,17 @@ export type User = {
 	fullName: string;
 	email: string;
 	role: string;
+};
+
+export type Dependents = {
+	_id: string;
+	householdId: string;
+	firstName: string;
+	middleName: string;
+	lastName: string;
+	fullName: string;
+	dateOfBirth: string;
+	age?: number;
+	gender: string;
+	isVoter: boolean;
 };
