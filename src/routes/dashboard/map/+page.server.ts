@@ -1,29 +1,37 @@
 import type { PageServerLoad } from './$types';
 import clientPromise from '$lib/server/mongo';
 
-export const load: PageServerLoad = async ({ locals }) => {
+export const ssr = false;
+
+export const load: PageServerLoad = async () => {
 	try {
 		const db = await clientPromise();
 		const householdsCollection = db.collection('households');
 		const barangaysCollection = db.collection('barangays');
 
-		// Get all barangays first
+		// Get all barangays
 		const barangays = await barangaysCollection
 			.find({ isActive: true })
 			.sort({ name: 1 })
 			.toArray();
 
-		// Get all households with their tags
+		// Get all households with coordinates and tags
 		const households = await householdsCollection
-			.find({ isActive: true })
-			.sort({ updatedAt: -1 }) // Sort by most recently updated
+			.find({
+				isActive: true,
+				latitude: { $exists: true },
+				longitude: { $exists: true }
+			})
+			.sort({ updatedAt: -1 })
 			.toArray();
 
-		// Create a map of barangay IDs to names for quick lookup
-		const barangayMap = new Map(barangays.map((b) => [b._id, b.name]));
+		// Create a map of barangay IDs to names
+		const barangayMap = new Map(
+			barangays.map((b: { _id: string; name: string }) => [b._id, b.name])
+		);
 
 		// Enhance household data with barangay names
-		const enhancedHouseholds = households.map((household) => ({
+		const enhancedHouseholds = households.map((household: any) => ({
 			...household,
 			barangayName: barangayMap.get(household.barangayId) || 'Unknown Barangay'
 		}));
@@ -33,7 +41,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 			barangays
 		};
 	} catch (error) {
-		console.error('Error loading households:', error);
+		console.error('Error loading map data:', error);
 		return {
 			households: [],
 			barangays: []

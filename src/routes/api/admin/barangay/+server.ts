@@ -18,7 +18,7 @@ export const GET = async ({ request }: any) => {
 			}
 		},
 		{
-			$sort: { createdAt: -1 }
+			$sort: { name: 1 }
 		}
 	];
 
