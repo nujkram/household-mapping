@@ -27,6 +27,9 @@ export type Household = {
 	isVoter: boolean;
 	latitude: string;
 	longitude: string;
+	tag?: 'APIN' | 'KONTRA' | 'UNTAGGED';
+	updatedAt: string;
+	barangayName?: string;
 };
 
 export type User = {

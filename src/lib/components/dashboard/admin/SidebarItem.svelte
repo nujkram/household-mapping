@@ -25,6 +25,18 @@
 	<span>Barangays</span>
 </AppRailAnchor>
 <AppRailAnchor
+	title="Households"
+	href="/dashboard/households"
+	selected={$page.url.pathname === '/dashboard/households'}
+>
+	<svelte:fragment slot="lead">
+		<div class="flex items-center justify-center">
+			<People />
+		</div>
+	</svelte:fragment>
+	<span>Households</span>
+</AppRailAnchor>
+<AppRailAnchor
 	title="Upload"
 	href="/dashboard/upload"
 	selected={$page.url.pathname === '/dashboard/upload'}

@@ -38,16 +38,16 @@
 			});
 
 			google.maps.event.addListener(marker, 'dragend', () => {
-				const position = marker.getPosition();
+				const position = marker.position;
 				if (position) {
-					latitude = position.lat().toString();
-					longitude = position.lng().toString();
+					latitude = position.lat.toString();
+					longitude = position.lng.toString();
 				}
 			});
 
 			map.addListener('click', (event: google.maps.MapMouseEvent) => {
-				marker.setPosition(event.latLng);
 				if (event.latLng) {
+					marker.position = event.latLng;
 					latitude = event.latLng.lat().toString();
 					longitude = event.latLng.lng().toString();
 				}
@@ -63,8 +63,9 @@
 		try {
 			await loadGoogleMaps(apiKey);
 			initMap();
-		} catch (error) {
-			showToast(toastStore, 'Failed to load Google Maps', false);
+		} catch (error: unknown) {
+			const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
+			showToast(toastStore, errorMessage, false);
 			console.error(error);
 		}
 	});

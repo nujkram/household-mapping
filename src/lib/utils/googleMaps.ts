@@ -1,7 +1,7 @@
 let isLoaded = false;
 let loadingPromise: Promise<void> | null = null;
 
-export const loadGoogleMaps = async (apiKey: string): Promise<void> => {
+export const loadGoogleMaps = async (apiKey: string, libraries: string[] = []): Promise<void> => {
 	if (isLoaded) {
 		return;
 	}
@@ -11,10 +11,15 @@ export const loadGoogleMaps = async (apiKey: string): Promise<void> => {
 		return loadingPromise;
 	}
 
+	// Add visualization library if not already included
+	if (!libraries.includes('visualization')) {
+		libraries.push('visualization');
+	}
+
 	loadingPromise = new Promise((resolve, reject) => {
 		try {
 			const script = document.createElement('script');
-			script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&v=weekly`;
+			script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=${libraries.join(',')}&v=weekly`;
 			script.async = true;
 			script.defer = true;
 

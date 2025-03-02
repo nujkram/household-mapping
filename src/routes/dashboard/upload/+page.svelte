@@ -55,7 +55,6 @@
 				.map((row, index) => {
 					// Split on commas but preserve commas within quotes
 					const values = row.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || [];
-					console.log(values);
 
 					// Determine VIN and disability position based on values length
 					const vin =

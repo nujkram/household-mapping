@@ -123,9 +123,6 @@ export async function POST({ request, locals }: RequestEvent) {
 						// Apply the checkKey function to standardize the data
 						household = checkKey(household);
 
-						// Add debug logging
-						console.log('Processing household:', household);
-
 						// Only push if we have at least a last name or first name
 						if (household.lastName || household.firstName) {
 							results.push(household);

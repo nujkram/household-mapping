@@ -6,10 +6,8 @@
 	import { loadGoogleMaps } from '$lib/utils/googleMaps';
 	import { calculateAge } from '$lib/common/utils';
 	import Update from '$lib/components/forms/household/Update.svelte';
-
 	export let data;
 	let { householdDetail } = data;
-
 	// drawer settings
 	const drawerUpdate: DrawerSettings = {
 		id: 'updateHousehold',
@@ -33,7 +31,7 @@
 			lat: householdDetail.latitude ? Number(householdDetail.latitude) : defaultLocation.lat,
 			lng: householdDetail.longitude ? Number(householdDetail.longitude) : defaultLocation.lng
 		};
-		console.log(location);
+
 		map = new google.maps.Map(document.getElementById('household-map') as HTMLElement, {
 			center: location,
 			zoom: 15,
