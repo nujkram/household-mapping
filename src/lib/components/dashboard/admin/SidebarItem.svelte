@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/stores';
 	import { AppRailAnchor } from '@skeletonlabs/skeleton';
-	import { Building, Fire, Home, PersonBadge } from '$lib/components/icons/index';
+	import { Building, Fire, Home, PersonBadge, People } from '$lib/components/icons/index';
 </script>
 
 <AppRailAnchor title="Home" href="/dashboard" selected={$page.url.pathname === '/dashboard'}>
@@ -23,6 +23,18 @@
 		</div>
 	</svelte:fragment>
 	<span>Barangays</span>
+</AppRailAnchor>
+<AppRailAnchor
+	title="Upload"
+	href="/dashboard/upload"
+	selected={$page.url.pathname === '/dashboard/upload'}
+>
+	<svelte:fragment slot="lead">
+		<div class="flex items-center justify-center">
+			<People />
+		</div>
+	</svelte:fragment>
+	<span>Upload</span>
 </AppRailAnchor>
 <AppRailAnchor
 	title="Users"
