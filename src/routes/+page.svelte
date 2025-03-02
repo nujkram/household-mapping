@@ -55,8 +55,6 @@
 			// The page will automatically refresh with the new session
 			if (data.user.role === 'ADMINISTRATOR') {
 				goto('/dashboard');
-			} else {
-				goto(`/judge/${data.user._id}`);
 			}
 		} catch (error) {
 			toastSettings.message = error.message || 'Invalid username or password';

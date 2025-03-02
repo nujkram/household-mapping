@@ -39,6 +39,7 @@ export type User = {
 export type Dependents = {
 	_id: string;
 	householdId: string;
+	linkedHouseholdId?: string;
 	firstName: string;
 	middleName: string;
 	lastName: string;

@@ -12,54 +12,89 @@
 	export let barangay: Barangay;
 
 	const isFocused = true;
+	let isLoading = true;
+	let isInitializing = true;
 	let barangays: Barangay[] = [];
 	let dependentFields: Dependents[] = data.dependentDetails || [];
 	let map: google.maps.Map;
-	let marker: google.maps.marker.AdvancedMarkerElement;
+	let marker: google.maps.Marker;
+	let householdsForDependents: Household[] = [];
+	let searchQuery = '';
+	let filteredHouseholds: Household[] = [];
+	let selectedHouseholdId = '';
 
 	// toast settings
 	const toastStore = getToastStore();
 
 	onMount(async () => {
-		const apiKey: string = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
-		if (!apiKey) {
-			const mapError = 'Google Maps API key is missing. Please check your .env file.';
-			showToast(toastStore, mapError, true);
-			return;
-		}
-
+		isInitializing = true;
 		try {
-			await loadGoogleMaps(apiKey);
+			const apiKey: string = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
+			if (!apiKey) {
+				throw new Error('Google Maps API key is missing. Please check your .env file.');
+			}
+
+			// Load all data in parallel for better performance
+			const [mapLoaded, barangayResponse] = await Promise.all([
+				loadGoogleMaps(apiKey),
+				fetch('/api/admin/barangay', {
+					method: 'GET',
+					headers: { 'Content-Type': 'application/json' }
+				})
+			]);
+
+			const barangayData = await barangayResponse.json();
+			barangays = barangayData.response;
+
 			initMap();
-
-			const response = await fetch('/api/admin/barangay', {
-				method: 'GET',
-				headers: {
-					'Content-Type': 'application/json'
-				}
-			});
-
-			const result = await response.json();
-			barangays = result.response;
-		} catch (error) {
-			showToast(toastStore, 'Failed to load Google Maps', false);
+			await fetchHouseholdsForDependents();
+		} catch (error: unknown) {
+			showToast(
+				toastStore,
+				error instanceof Error ? error.message : 'An unknown error occurred',
+				false
+			);
 			console.error(error);
+		} finally {
+			isInitializing = false;
+			isLoading = false;
 		}
 	});
 
 	const initMap = (): void => {
-		// Ensure we have valid coordinates
-		let lat = Number.parseFloat(data.latitude);
-		let lng = Number.parseFloat(data.longitude);
+		// Default location (center of Philippines)
+		const defaultLocation = { lat: 11.442339253918387, lng: 122.69376754760742 };
 
-		if (Number.isNaN(lat) || Number.isNaN(lng)) {
-			console.warn('Invalid household coordinates:', data);
-			// Use barangay coordinates as fallback
-			lat = Number.parseFloat(barangay.latitude);
-			lng = Number.parseFloat(barangay.longitude);
+		// Try to get coordinates from data first
+		let location = defaultLocation;
+
+		try {
+			const lat = Number.parseFloat(data.latitude);
+			const lng = Number.parseFloat(data.longitude);
+
+			if (!Number.isNaN(lat) && !Number.isNaN(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) {
+				location = { lat, lng };
+			} else {
+				// Try barangay coordinates as fallback
+				const barangayLat = Number.parseFloat(barangay.latitude);
+				const barangayLng = Number.parseFloat(barangay.longitude);
+
+				if (
+					!Number.isNaN(barangayLat) &&
+					!Number.isNaN(barangayLng) &&
+					Math.abs(barangayLat) <= 90 &&
+					Math.abs(barangayLng) <= 180
+				) {
+					location = { lat: barangayLat, lng: barangayLng };
+				}
+			}
+		} catch (error) {
+			console.warn('Error parsing coordinates, using default location:', error);
 		}
 
-		const location = { lat, lng };
+		// Set initial latitude and longitude values
+		data.latitude = location.lat.toString();
+		data.longitude = location.lng.toString();
 
 		map = new google.maps.Map(document.getElementById('map') as HTMLElement, {
 			center: location,
@@ -67,18 +102,14 @@
 			mapId: import.meta.env.VITE_GOOGLE_MAPS_ID
 		});
 
-		marker = new google.maps.marker.AdvancedMarkerElement({
+		marker = new google.maps.Marker({
 			map,
 			position: location,
-			gmpDraggable: true
+			draggable: true
 		});
 
-		// Set initial latitude and longitude values
-		data.latitude = lat.toString();
-		data.longitude = lng.toString();
-
 		marker.addListener('dragend', () => {
-			const position = marker.position as google.maps.LatLng;
+			const position = marker.getPosition();
 			if (position) {
 				data.latitude = position.lat().toString();
 				data.longitude = position.lng().toString();
@@ -87,7 +118,7 @@
 
 		map.addListener('click', (event: google.maps.MapMouseEvent) => {
 			if (event.latLng) {
-				marker.position = event.latLng;
+				marker.setPosition(event.latLng);
 				data.latitude = event.latLng.lat().toString();
 				data.longitude = event.latLng.lng().toString();
 			}
@@ -104,8 +135,59 @@
 			.toUpperCase();
 	};
 
+	const filterHouseholds = (query: string) => {
+		if (!query?.trim()) {
+			filteredHouseholds = [];
+			return;
+		}
+
+		const searchTerm = query.toLowerCase();
+		filteredHouseholds = householdsForDependents
+			.filter(
+				(h) =>
+					h.fullName.toLowerCase().includes(searchTerm) ||
+					h.firstName.toLowerCase().includes(searchTerm) ||
+					h.lastName.toLowerCase().includes(searchTerm)
+			)
+			.slice(0, 5); // Limit to 5 results
+	};
+
+	const applyHouseholdToDependent = (household: Household) => {
+		// Apply to the first available dependent
+		const firstDependent = dependentFields[0];
+		if (firstDependent) {
+			firstDependent.linkedHouseholdId = household._id;
+			firstDependent.firstName = household.firstName;
+			firstDependent.middleName = household.middleName;
+			firstDependent.lastName = household.lastName;
+			firstDependent.fullName = household.fullName;
+			firstDependent.dateOfBirth = household.dateOfBirth;
+			firstDependent.gender = household.gender;
+			firstDependent.isVoter = household.isVoter;
+		}
+		selectedHouseholdId = household._id;
+		searchQuery = household.fullName;
+		filteredHouseholds = [];
+	};
+
+	const clearHouseholdLink = () => {
+		const firstDependent = dependentFields[0];
+		if (firstDependent) {
+			firstDependent.linkedHouseholdId = '';
+			firstDependent.firstName = '';
+			firstDependent.middleName = '';
+			firstDependent.lastName = '';
+			firstDependent.fullName = '';
+			firstDependent.dateOfBirth = '';
+			firstDependent.gender = 'MALE';
+			firstDependent.isVoter = false;
+		}
+		selectedHouseholdId = '';
+		searchQuery = '';
+		filteredHouseholds = [];
+	};
+
 	$: {
-		// Reset and regenerate dependent fields when dependents number changes
 		if (data.dependents) {
 			const newLength = Number.parseInt(data.dependents.toString());
 
@@ -116,6 +198,7 @@
 					{
 						_id: id(),
 						householdId: data._id,
+						linkedHouseholdId: '',
 						firstName: '',
 						middleName: '',
 						lastName: '',
@@ -133,7 +216,42 @@
 			}
 		}
 	}
+
+	const fetchHouseholdsForDependents = async () => {
+		try {
+			const response = await fetch(`/api/admin/household/list/${barangay._id}`, {
+				method: 'GET',
+				headers: {
+					'Content-Type': 'application/json'
+				}
+			});
+
+			const result = await response.json();
+			// Filter out the current household and format the data
+			householdsForDependents = result.response
+				.filter((h: Household) => h._id !== data._id)
+				.map((h: Household) => ({
+					...h,
+					fullNameWithId: `${h.fullName} (${h._id})`
+				}));
+		} catch (error) {
+			showToast(toastStore, 'Failed to load households', false);
+			console.error(error);
+		}
+	};
 </script>
+
+<!-- Add loading overlay -->
+{#if isInitializing}
+	<div class="fixed inset-0 bg-surface-100-800-token/50 flex items-center justify-center z-50">
+		<div class="card p-4 space-y-4">
+			<div class="flex items-center space-x-4">
+				<div class="spinner-border" />
+				<p>Loading household data...</p>
+			</div>
+		</div>
+	</div>
+{/if}
 
 <form
 	method="POST"
@@ -172,9 +290,12 @@
 			showToast(toastStore, result.message, true);
 			drawerStore.close();
 		} catch (error) {
-			const err = error;
-			showToast(toastStore, err.message, false);
-			console.error(err);
+			showToast(
+				toastStore,
+				error instanceof Error ? error.message : 'An unknown error occurred',
+				false
+			);
+			console.error(error);
 		}
 	}}
 >
@@ -237,7 +358,6 @@
 				placeholder="09171234567"
 				name="phone"
 				bind:value={data.phone}
-				required
 			/>
 		</label>
 
@@ -251,7 +371,7 @@
 
 		<label class="label">
 			<span>Date of Birth</span>
-			<input class="input" type="date" name="dateOfBirth" bind:value={data.dateOfBirth} required />
+			<input class="input" type="date" name="dateOfBirth" bind:value={data.dateOfBirth} />
 		</label>
 
 		<label class="label flex items-center gap-2">
@@ -261,12 +381,48 @@
 
 		<label class="label">
 			<span>Dependents</span>
-			<input class="input" type="number" name="dependents" bind:value={data.dependents} required />
+			<input class="input" type="number" name="dependents" bind:value={data.dependents} />
 		</label>
 
 		{#if dependentFields.length > 0}
-			<div class="col-span-2">
+			<div class="col-span-2 space-y-4">
 				<h3 class="h3 mb-4">Dependent Details</h3>
+				<div class="label col-span-2 relative">
+					<span>Link to Existing Household (Optional)</span>
+					<input
+						class="input"
+						type="text"
+						placeholder="Search for household..."
+						bind:value={searchQuery}
+						on:input={() => filterHouseholds(searchQuery)}
+					/>
+
+					{#if filteredHouseholds.length > 0}
+						<div
+							class="absolute z-50 w-full bg-surface-100-800-token border border-surface-500-400-token rounded-md mt-1 max-h-48 overflow-y-auto"
+						>
+							{#each filteredHouseholds as household}
+								<button
+									class="w-full text-left px-4 py-2 hover:bg-surface-hover-token"
+									type="button"
+									on:click={() => applyHouseholdToDependent(household)}
+								>
+									{household.fullName}
+								</button>
+							{/each}
+						</div>
+					{/if}
+
+					{#if selectedHouseholdId}
+						<button
+							type="button"
+							class="btn btn-sm variant-filled-error mt-2"
+							on:click={clearHouseholdLink}
+						>
+							Clear Link
+						</button>
+					{/if}
+				</div>
 				{#each dependentFields as dependent, index}
 					<div class="card p-4 mb-4">
 						<h4 class="h4 mb-2">Dependent {index + 1}</h4>
@@ -363,3 +519,20 @@
 		</button>
 	</div>
 </form>
+
+<style>
+	.spinner-border {
+		width: 2rem;
+		height: 2rem;
+		border: 0.25em solid currentColor;
+		border-right-color: transparent;
+		border-radius: 50%;
+		animation: spinner-border 0.75s linear infinite;
+	}
+
+	@keyframes spinner-border {
+		to {
+			transform: rotate(360deg);
+		}
+	}
+</style>

@@ -23,25 +23,34 @@
 	const toastStore = getToastStore();
 
 	let map: google.maps.Map;
-	let marker: google.maps.marker.AdvancedMarkerElement;
+	let marker: google.maps.Marker;
+
+	// Default location (you may want to adjust these coordinates)
+	const defaultLocation = { lat: 11.442339253918387, lng: 122.69376754760742 };
 
 	const initMap = (): void => {
 		const location = {
-			lat: Number(householdDetail.latitude),
-			lng: Number(householdDetail.longitude)
+			lat: householdDetail.latitude ? Number(householdDetail.latitude) : defaultLocation.lat,
+			lng: householdDetail.longitude ? Number(householdDetail.longitude) : defaultLocation.lng
 		};
-
+		console.log(location);
 		map = new google.maps.Map(document.getElementById('household-map') as HTMLElement, {
 			center: location,
 			zoom: 15,
 			mapId: import.meta.env.VITE_GOOGLE_MAPS_ID
 		});
 
-		marker = new google.maps.marker.AdvancedMarkerElement({
+		// Use regular Marker instead of AdvancedMarkerElement
+		marker = new google.maps.Marker({
 			map,
 			position: location,
 			title: householdDetail.fullName
 		});
+
+		// Show a warning if coordinates are not set
+		if (!householdDetail.latitude || !householdDetail.longitude) {
+			showToast(toastStore, 'Location coordinates are not set for this household', false);
+		}
 	};
 
 	onMount(async () => {
@@ -63,7 +72,15 @@
 
 <div class="card p-4">
 	<header class="card-header">
-		<h1 class="h1">Household Details</h1>
+		<h1 class="h1 flex gap-2">
+			Household Details <div
+				class="badge size-min {householdDetail.tag === 'APIN'
+					? 'bg-success-500'
+					: 'bg-error-500'} text-white"
+			>
+				{householdDetail.tag}
+			</div>
+		</h1>
 	</header>
 
 	<section class="p-4">
@@ -88,7 +105,7 @@
 					</div>
 					<div>
 						<span class="font-bold">Date of Birth:</span>
-						<span>{householdDetail.dateOfBirth}</span>
+						<span>{householdDetail.dateOfBirth || ''}</span>
 					</div>
 					<div>
 						<span class="font-bold">Age:</span>
@@ -96,7 +113,7 @@
 					</div>
 					<div>
 						<span class="font-bold">Phone:</span>
-						<span>{householdDetail.phone}</span>
+						<span>{householdDetail.phone || ''}</span>
 					</div>
 					<div>
 						<span class="font-bold">Voter Status:</span>

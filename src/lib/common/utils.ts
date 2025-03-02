@@ -183,6 +183,9 @@ export const secretGenerator = async (length: number) => {
 };
 
 export const calculateAge = (dateOfBirth: string) => {
+	if (dateOfBirth === null) {
+		return '';
+	}
 	const birthDate = new Date(dateOfBirth);
 	const currentDate = new Date();
 	const age = currentDate.getFullYear() - birthDate.getFullYear();

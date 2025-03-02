@@ -2,14 +2,76 @@
 	import type { Household } from '$lib/utils/types';
 	import { calculateAge } from '$lib/common/utils';
 	import { barangayStore } from '$lib/stores/barangayStore';
+	import { getToastStore } from '@skeletonlabs/skeleton';
 
 	export let data: Household[] = [];
 	export let handleClickView: (item: Household) => void;
 	export let handleClickUpdate: (item: Household) => void;
-
+	export let handleClickTag: (item: Household) => void;
 	// Make the table reactive to store changes and ensure it's always an array
 	$: households = Array.isArray(data) ? data : [];
+
+	const toastStore = getToastStore();
+	let selectedHousehold: any = null;
+	let isDropdownOpen = false;
+	let isProcessing = false;
+
+	async function handleSetTag(household: Household, tag: 'APIN' | 'KONTRA' | 'UNTAGGED') {
+		isProcessing = true;
+		try {
+			const response = await fetch('/api/admin/household/set-tag', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json'
+				},
+				body: JSON.stringify({
+					householdId: household._id,
+					tag
+				})
+			});
+
+			const result = await response.json();
+			if (response.ok) {
+				// Update store to trigger reactivity
+				await barangayStore.refresh();
+
+				// Close dropdown
+				isDropdownOpen = false;
+				selectedHousehold = null;
+
+				// Show success toast
+				toastStore.trigger({
+					message: `Successfully tagged as ${tag}`,
+					background: 'variant-filled-success'
+				});
+			} else {
+				toastStore.trigger({
+					message: result.error || 'Failed to update tag',
+					background: 'variant-filled-error'
+				});
+			}
+		} catch (error) {
+			console.error('Error setting tag:', error);
+			toastStore.trigger({
+				message: 'Failed to update tag',
+				background: 'variant-filled-error'
+			});
+		} finally {
+			isProcessing = false;
+		}
+	}
+
+	// Close dropdown when clicking outside
+	function handleClickOutside(event: MouseEvent) {
+		const target = event.target as HTMLElement;
+		if (!target.closest('.tag-dropdown')) {
+			isDropdownOpen = false;
+			selectedHousehold = null;
+		}
+	}
 </script>
+
+<svelte:window on:click={handleClickOutside} />
 
 <div class="table-container">
 	<table class="table table-hover">
@@ -21,6 +83,7 @@
 				<th>Age</th>
 				<th>Phone</th>
 				<th>Dependents</th>
+				<th>Tag</th>
 				<th class="text-center">Actions</th>
 			</tr>
 		</thead>
@@ -28,11 +91,63 @@
 			{#each households as item, i}
 				<tr>
 					<td>{item.fullName}</td>
-					<td>{item.gender}</td>
-					<td>{item.dateOfBirth}</td>
-					<td>{calculateAge(item.dateOfBirth)}</td>
-					<td>{item.phone}</td>
-					<td>{item.dependents}</td>
+					<td>{item.gender || ''}</td>
+					<td>{item.dateOfBirth || ''}</td>
+					<td>{calculateAge(item.dateOfBirth) || ''}</td>
+					<td>{item.phone || ''}</td>
+					<td>{item.dependents || ''}</td>
+					<td>
+						<div class="relative tag-dropdown">
+							<button
+								class="btn btn-sm {item.tag === 'UNTAGGED'
+									? 'variant-filled-surface'
+									: item.tag === 'APIN'
+										? 'variant-filled-success'
+										: 'variant-filled-error'}"
+								on:click|stopPropagation={() => {
+									selectedHousehold = item;
+									isDropdownOpen = !isDropdownOpen;
+								}}
+								disabled={isProcessing}
+							>
+								{isProcessing ? 'Processing...' : item.tag || 'Tag'}
+							</button>
+
+							{#if isDropdownOpen && selectedHousehold?._id === item._id}
+								<div
+									class="absolute z-50 mt-1 w-32 bg-surface-100-800-token shadow-lg rounded-lg overflow-hidden"
+								>
+									<button
+										class="w-full px-4 py-2 text-left hover:bg-surface-hover-token {item.tag ===
+										'APIN'
+											? 'bg-success-500/20'
+											: ''}"
+										on:click={() => handleSetTag(item, 'APIN')}
+									>
+										APIN
+									</button>
+									<button
+										class="w-full px-4 py-2 text-left hover:bg-surface-hover-token {item.tag ===
+										'KONTRA'
+											? 'bg-error-500/20'
+											: ''}"
+										on:click={() => handleSetTag(item, 'KONTRA')}
+									>
+										KONTRA
+									</button>
+									<button
+										class="w-full px-4 py-2 text-left hover:bg-surface-hover-token {item.tag ===
+										'UNTAGGED'
+											? 'bg-surface-500/20'
+											: ''}"
+										on:click={() => handleSetTag(item, 'UNTAGGED')}
+									>
+										Untag
+									</button>
+								</div>
+							{/if}
+						</div>
+					</td>
 					<td>
 						<div class="flex flex-row gap-2 items-center justify-center">
 							<button

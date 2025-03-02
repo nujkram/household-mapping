@@ -58,6 +58,19 @@
 		drawerStore.open(drawerUpdateHousehold);
 	};
 
+	const handleClickTag = async (item: Household) => {
+		await fetch('/api/admin/household/set-tag', {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json'
+			},
+			body: JSON.stringify({
+				householdId: item._id,
+				tag: item?.tag === 'APIN' ? 'KONTRA' : 'APIN'
+			})
+		});
+	};
+
 	const drawerStore = getDrawerStore();
 	drawerStore.close();
 
@@ -178,6 +191,7 @@
 				data={barangayDetail?.households || []}
 				{handleClickView}
 				{handleClickUpdate}
+				{handleClickTag}
 			/>
 		{/key}
 	</section>
