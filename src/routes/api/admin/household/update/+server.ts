@@ -24,6 +24,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				isVoter: data.isVoter,
 				latitude: data.latitude,
 				longitude: data.longitude,
+				tag: data.tag,
 				updatedBy: locals.user._id
 			}
 		};

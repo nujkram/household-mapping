@@ -11,7 +11,7 @@
 	import type { DrawerSettings, PaginationSettings, TableSource } from '@skeletonlabs/skeleton';
 	import { goto } from '$app/navigation';
 
-	let isReady: Boolean = false;
+	let isReady: boolean = false;
 	let keyword: string = '';
 	let sourceData: any = [];
 	let table: TableSource = {

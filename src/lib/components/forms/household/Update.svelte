@@ -6,6 +6,7 @@
 	import { barangayStore } from '$lib/stores/barangayStore';
 	import { loadGoogleMaps } from '$lib/utils/googleMaps';
 	import { id } from '$lib/common/utils';
+	import { householdStore } from '$lib/stores/householdStore';
 
 	export let drawerStore: DrawerStore;
 	export let data: Household;
@@ -278,17 +279,23 @@
 					dependents: data.dependents,
 					dependentDetails: dependentFields,
 					latitude: data.latitude,
-					longitude: data.longitude
+					longitude: data.longitude,
+					tag: data.tag
 				})
 			});
 
 			const result = await response.json();
 
-			// First refresh the store to get updated data with households
-			await barangayStore.refresh();
+			if (response.ok) {
+				// First refresh the stores
+				await barangayStore.refresh();
+				await householdStore.refresh();
 
-			showToast(toastStore, result.message, true);
-			drawerStore.close();
+				showToast(toastStore, result.message, true);
+				drawerStore.close();
+			} else {
+				throw new Error(result.error || 'Failed to update household');
+			}
 		} catch (error) {
 			showToast(
 				toastStore,
@@ -377,6 +384,15 @@
 		<label class="label flex items-center gap-2">
 			<span>Is Voter</span>
 			<input class="input w-4" type="checkbox" name="isVoter" bind:checked={data.isVoter} />
+		</label>
+
+		<label class="label">
+			<span>Tag</span>
+			<select class="select" bind:value={data.tag}>
+				<option value="UNTAGGED">UNTAGGED</option>
+				<option value="APIN">APIN</option>
+				<option value="KONTRA">KONTRA</option>
+			</select>
 		</label>
 
 		<label class="label">

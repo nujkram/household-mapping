@@ -64,17 +64,7 @@
 		}
 		markers = [];
 
-		console.log('Filtered households:', filteredHouseholds);
-
 		for (const household of filteredHouseholds) {
-			console.log('Processing household:', {
-				latitude: household.latitude,
-				longitude: household.longitude,
-				parsed: {
-					lat: Number.parseFloat(household.latitude),
-					lng: Number.parseFloat(household.longitude)
-				}
-			});
 			// Validate that coordinates are valid numbers
 			const lat = Number.parseFloat(household.latitude);
 			const lng = Number.parseFloat(household.longitude);

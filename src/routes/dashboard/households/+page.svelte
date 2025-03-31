@@ -7,18 +7,21 @@
 	import { barangayStore } from '$lib/stores/barangayStore';
 	import Create from '$lib/components/forms/household/Create.svelte';
 	import Update from '$lib/components/forms/household/Update.svelte';
+	import { householdStore } from '$lib/stores/householdStore';
 
 	interface PageData {
-		households: Household[];
 		barangays: Barangay[];
 	}
 
 	export let data: PageData;
-	let { households, barangays } = data;
+	let { barangays } = data;
 
 	// Store instances
 	const toastStore = getToastStore();
 	const drawerStore = getDrawerStore();
+
+	// Subscribe to the household store
+	$: households = $householdStore;
 
 	// Search and filter state
 	let searchQuery = '';
@@ -68,7 +71,12 @@
 			return direction * (new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime());
 		});
 
-	// Handle household tag update
+	// Initialize store on mount
+	onMount(async () => {
+		await householdStore.refresh();
+	});
+
+	// Update the handleSetTag function to refresh data after successful update
 	async function handleSetTag(household: Household, tag: 'APIN' | 'KONTRA' | 'UNTAGGED') {
 		try {
 			const response = await fetch('/api/admin/household/set-tag', {
@@ -84,9 +92,8 @@
 
 			const result = await response.json();
 			if (response.ok) {
-				// Update the local state
-				households = households.map((h) => (h._id === household._id ? { ...h, tag } : h));
-
+				// Instead of manually updating the state, refresh the data
+				await householdStore.refresh();
 				showToast(toastStore, `Successfully tagged as ${tag}`, true);
 			} else {
 				showToast(toastStore, result.error || 'Failed to update tag', false);

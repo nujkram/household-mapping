@@ -6,6 +6,7 @@
 	import type { Barangay, Dependents } from '$lib/utils/types';
 	import { loadGoogleMaps } from '$lib/utils/googleMaps';
 	import { id } from '$lib/common/utils';
+	import { householdStore } from '$lib/stores/householdStore';
 
 	export let drawerStore: DrawerStore;
 	export let data: Barangay;
@@ -175,6 +176,7 @@
 
 			const result = await response.json();
 			await barangayStore.refresh();
+			await householdStore.refresh();
 
 			showToast(toastStore, result.message, true);
 			drawerStore.close();
@@ -257,7 +259,7 @@
 
 		<label class="label">
 			<span>Date of Birth</span>
-			<input class="input" type="date" name="dateOfBirth" bind:value={dateOfBirth} required />
+			<input class="input" type="date" name="dateOfBirth" bind:value={dateOfBirth} />
 		</label>
 
 		<label class="label flex items-center gap-2">
