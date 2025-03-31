@@ -15,6 +15,18 @@
 	let selectedHousehold: any = null;
 	let isDropdownOpen = false;
 	let isProcessing = false;
+	let searchQuery = '';
+	let selectedTag: 'APIN' | 'KONTRA' | 'UNTAGGED' | '' = '';
+
+	// Filter households based on search query and tag
+	$: filteredHouseholds = data.filter((household: Household) => {
+		const matchesSearch = !searchQuery || 
+			household.fullName.toLowerCase().includes(searchQuery.toLowerCase());
+		
+		const matchesTag = !selectedTag || household.tag === selectedTag;
+
+		return matchesSearch && matchesTag;
+	});
 
 	async function handleSetTag(household: Household, tag: 'APIN' | 'KONTRA' | 'UNTAGGED') {
 		isProcessing = true;
@@ -73,6 +85,31 @@
 
 <svelte:window on:click={handleClickOutside} />
 
+<!-- Add filters above the table -->
+<div class="flex gap-4 mb-4">
+	<!-- Search input -->
+	<div class="input-group input-group-divider grid-cols-[auto_1fr_auto]">
+		<div class="input-group-shim">🔍</div>
+		<input
+			type="search"
+			bind:value={searchQuery}
+			placeholder="Search by name..."
+			class="input"
+		/>
+	</div>
+
+	<!-- Tag filter -->
+	<select
+		bind:value={selectedTag}
+		class="select"
+	>
+		<option value="">All Tags</option>
+		<option value="APIN">APIN</option>
+		<option value="KONTRA">KONTRA</option>
+		<option value="UNTAGGED">UNTAGGED</option>
+	</select>
+</div>
+
 <div class="table-container">
 	<table class="table table-hover">
 		<thead>
@@ -88,7 +125,7 @@
 			</tr>
 		</thead>
 		<tbody>
-			{#each households as item, i}
+			{#each filteredHouseholds as item, i}
 				<tr>
 					<td>{item.fullName}</td>
 					<td>{item.gender || ''}</td>
