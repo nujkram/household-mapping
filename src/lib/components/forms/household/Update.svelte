@@ -153,39 +153,40 @@
 			.slice(0, 5); // Limit to 5 results
 	};
 
-	const applyHouseholdToDependent = (household: Household) => {
-		// Apply to the first available dependent
-		const firstDependent = dependentFields[0];
-		if (firstDependent) {
-			firstDependent.linkedHouseholdId = household._id;
-			firstDependent.firstName = household.firstName;
-			firstDependent.middleName = household.middleName;
-			firstDependent.lastName = household.lastName;
-			firstDependent.fullName = household.fullName;
-			firstDependent.dateOfBirth = household.dateOfBirth;
-			firstDependent.gender = household.gender;
-			firstDependent.isVoter = household.isVoter;
+	const applyHouseholdToDependent = (household: Household, dependentIndex: number) => {
+		// Apply to the specified dependent
+		const dependent = dependentFields[dependentIndex];
+		if (dependent) {
+			dependent.linkedHouseholdId = household._id;
+			dependent.firstName = household.firstName;
+			dependent.middleName = household.middleName;
+			dependent.lastName = household.lastName;
+			dependent.fullName = household.fullName;
+			dependent.dateOfBirth = household.dateOfBirth;
+			dependent.gender = household.gender;
+			dependent.isVoter = household.isVoter;
 		}
-		selectedHouseholdId = household._id;
-		searchQuery = household.fullName;
+		// Clear the search
+		searchQuery = '';
 		filteredHouseholds = [];
 	};
 
-	const clearHouseholdLink = () => {
-		const firstDependent = dependentFields[0];
-		if (firstDependent) {
-			firstDependent.linkedHouseholdId = '';
-			firstDependent.firstName = '';
-			firstDependent.middleName = '';
-			firstDependent.lastName = '';
-			firstDependent.fullName = '';
-			firstDependent.dateOfBirth = '';
-			firstDependent.gender = 'MALE';
-			firstDependent.isVoter = false;
+	const clearHouseholdLink = (dependentIndex: number) => {
+		const dependent = dependentFields[dependentIndex];
+		if (dependent) {
+			// Clear all fields
+			dependent.linkedHouseholdId = '';
+			dependent.firstName = '';
+			dependent.middleName = '';
+			dependent.lastName = '';
+			dependent.fullName = '';
+			dependent.dateOfBirth = '';
+			dependent.gender = 'MALE';
+			dependent.isVoter = false;
+			
+			// Force Svelte to update the array by creating a new reference
+			dependentFields = [...dependentFields];
 		}
-		selectedHouseholdId = '';
-		searchQuery = '';
-		filteredHouseholds = [];
 	};
 
 	$: {
@@ -403,45 +404,48 @@
 		{#if dependentFields.length > 0}
 			<div class="col-span-2 space-y-4">
 				<h3 class="h3 mb-4">Dependent Details</h3>
-				<div class="label col-span-2 relative">
-					<span>Link to Existing Household (Optional)</span>
-					<input
-						class="input"
-						type="text"
-						placeholder="Search for household..."
-						bind:value={searchQuery}
-						on:input={() => filterHouseholds(searchQuery)}
-					/>
-
-					{#if filteredHouseholds.length > 0}
-						<div
-							class="absolute z-50 w-full bg-surface-100-800-token border border-surface-500-400-token rounded-md mt-1 max-h-48 overflow-y-auto"
-						>
-							{#each filteredHouseholds as household}
-								<button
-									class="w-full text-left px-4 py-2 hover:bg-surface-hover-token"
-									type="button"
-									on:click={() => applyHouseholdToDependent(household)}
-								>
-									{household.fullName}
-								</button>
-							{/each}
-						</div>
-					{/if}
-
-					{#if selectedHouseholdId}
-						<button
-							type="button"
-							class="btn btn-sm variant-filled-error mt-2"
-							on:click={clearHouseholdLink}
-						>
-							Clear Link
-						</button>
-					{/if}
-				</div>
 				{#each dependentFields as dependent, index}
 					<div class="card p-4 mb-4">
 						<h4 class="h4 mb-2">Dependent {index + 1}</h4>
+						<div class="label col-span-2 relative mb-4">
+							<span>Link to Existing Household (Optional)</span>
+							{#if dependent.linkedHouseholdId}
+								<div class="flex items-center gap-2 mt-2">
+									<span class="text-sm">Linked to: {dependent.fullName}</span>
+									<button
+										type="button"
+										class="btn btn-sm variant-filled-error"
+										on:click={() => clearHouseholdLink(index)}
+									>
+										Clear Link
+									</button>
+								</div>
+							{:else}
+								<input
+									class="input"
+									type="text"
+									placeholder="Search for household..."
+									on:input={(e) => filterHouseholds(e.target.value)}
+								/>
+
+								{#if filteredHouseholds.length > 0}
+									<div
+										class="absolute z-50 w-full bg-surface-100-800-token border border-surface-500-400-token rounded-md mt-1 max-h-48 overflow-y-auto"
+									>
+										{#each filteredHouseholds as household}
+											<button
+												class="w-full text-left px-4 py-2 hover:bg-surface-hover-token"
+												type="button"
+												on:click={() => applyHouseholdToDependent(household, index)}
+											>
+												{household.fullName}
+											</button>
+										{/each}
+									</div>
+								{/if}
+							{/if}
+						</div>
+
 						<div class="grid grid-cols-2 gap-2">
 							<label class="label">
 								<span>First Name</span>

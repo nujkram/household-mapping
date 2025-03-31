@@ -9,6 +9,30 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 		data = checkKey(data);
 
+		// Find all households that have dependents linked to this household
+		const householdsWithLinkedDependents = await Household.find({
+			'dependentDetails.linkedHouseholdId': data._id
+		}).toArray();
+
+		// Update the latitude/longitude for linked dependents in those households
+		for (const household of householdsWithLinkedDependents) {
+			const updatedDependents = household.dependentDetails.map(dependent => {
+				if (dependent.linkedHouseholdId === data._id) {
+					return {
+						...dependent,
+						latitude: data.latitude,
+						longitude: data.longitude
+					};
+				}
+				return dependent;
+			});
+
+			await Household.updateOne(
+				{ _id: household._id },
+				{ $set: { dependentDetails: updatedDependents } }
+			);
+		}
+
 		const householdUpdate = {
 			$set: {
 				updatedAt: new Date(),
