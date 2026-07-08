@@ -240,16 +240,19 @@
 						<th>Barangay</th>
 						<th>Phone</th>
 						<th>Tag</th>
+						{#if canGrant}
+							<th>Grants</th>
+						{/if}
 						<th>Last Updated</th>
 						<th class="text-center">Actions</th>
 					</tr>
 				</thead>
 				<tbody>
 					{#if $navigating}
-						<TableSkeleton rows={6} cols={6} />
+						<TableSkeleton rows={6} cols={canGrant ? 7 : 6} />
 					{:else if data.households.length === 0}
 						<tr>
-							<td colspan="6" class="text-center py-8 opacity-60">
+							<td colspan={canGrant ? 7 : 6} class="text-center py-8 opacity-60">
 								{#if !hasFilters && data.total === 0}
 									No households yet. Click “Add Household” to create one.
 								{:else}
@@ -319,6 +322,25 @@
 										></span>
 									{/if}
 								</td>
+								{#if canGrant}
+									<td>
+										{#if household.grants?.length}
+											<div class="flex flex-wrap gap-1 max-w-[220px]">
+												{#each household.grants as grant (grant.grantId)}
+													<span
+														class="badge variant-soft-success whitespace-nowrap"
+														title="{grant.name} ({grant.year})"
+													>
+														{grant.name}
+														<span class="opacity-60 ml-1">{grant.year}</span>
+													</span>
+												{/each}
+											</div>
+										{:else}
+											<span class="opacity-40">None</span>
+										{/if}
+									</td>
+								{/if}
 								<td>{new Date(household.updatedAt).toLocaleDateString()}</td>
 								<td class="text-center">
 									<div class="flex gap-2 justify-center">
