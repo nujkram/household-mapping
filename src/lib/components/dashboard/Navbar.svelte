@@ -1,40 +1,29 @@
 <script lang="ts">
 	import { page } from '$app/stores';
-	import { LightSwitch, popup } from '@skeletonlabs/skeleton';
-	import type { PopupSettings } from '@skeletonlabs/skeleton';
+	import { LightSwitch } from '@skeletonlabs/skeleton';
 	import { goto } from '$app/navigation';
+	import { ROLE_LABELS, type Role } from '$lib/utils/roles';
 
-	const popupClick: PopupSettings = {
-		event: 'click',
-		target: 'popupClick',
-		placement: 'bottom'
-	};
+	$: roleLabel = ROLE_LABELS[$page.data.user?.role as Role] ?? '';
 
 	const handleLogout = () => {
 		goto('/auth/logout/');
 	};
 </script>
 
-<LightSwitch />
+<div class="flex items-center gap-2 md:gap-3">
+	<LightSwitch />
 
-{#key $page.data.user}
 	{#if $page.data.user}
-		<button class="btn variant-filled w-auto" use:popup={popupClick}
-			>Hi, {$page.data.user.firstName || 'User'}</button
-		>
-		<div class="card p-4 bg-gray-900" data-popup="popupClick">
-			{#if $page?.data?.user?.role === 'USER'}
-				<a
-					class="btn variant-outline-surface variant-filled-surface my-2"
-					href="/user/profile/{$page?.data?.user?.empId}">Profile</a
-				>
+		<span class="hidden sm:inline text-sm">
+			Hi, {$page.data.user.firstName || 'User'}
+			{#if roleLabel}
+				<span class="badge variant-soft ml-1">{roleLabel}</span>
 			{/if}
-			<button
-				type="button"
-				class="btn variant-outline-surface variant-filled-surface"
-				on:click={handleLogout}>Logout</button
-			>
-			<div class="arrow bg-surface-100-800-token variant-outline-surface" />
-		</div>
+		</span>
+		<!-- Always-visible logout button (no hidden dropdown to discover). -->
+		<button type="button" class="btn btn-sm variant-filled-error" on:click={handleLogout}>
+			Logout
+		</button>
 	{/if}
-{/key}
+</div>

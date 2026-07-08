@@ -2,12 +2,14 @@
 	import { onMount } from 'svelte';
 	import { focusTrap, type DrawerStore, getToastStore } from '@skeletonlabs/skeleton';
 	import { showToast } from '$lib/utils/toastHelper';
+	import { submitJson } from '$lib/utils/apiHelper';
 	import { barangayStore } from '$lib/stores/barangayStore';
 	import { loadGoogleMaps } from '$lib/utils/googleMaps';
 
 	export let drawerStore: DrawerStore;
 
 	const isFocused = true;
+	let isSubmitting = false;
 	let name: string;
 	let lastName: string;
 	let middleName: string;
@@ -70,7 +72,30 @@
 		}
 	});
 
-	// ... rest of the script ...
+	const handleSubmit = async () => {
+		if (isSubmitting) return;
+		isSubmitting = true;
+		try {
+			const result = await submitJson('/api/admin/barangay/insert', {
+				name,
+				lastName,
+				middleName,
+				firstName,
+				phone,
+				latitude,
+				longitude
+			});
+			await barangayStore.refresh();
+
+			showToast(toastStore, result.message, true);
+			drawerStore.close();
+		} catch (error) {
+			showToast(toastStore, error instanceof Error ? error.message : 'Failed to save', false);
+			console.error(error);
+		} finally {
+			isSubmitting = false;
+		}
+	};
 </script>
 
 <form
@@ -78,34 +103,7 @@
 	autocomplete="off"
 	class="p-6 space-y-4"
 	use:focusTrap={isFocused}
-	on:submit|preventDefault={async (event) => {
-		try {
-			const response = await fetch('/api/admin/barangay/insert', {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json'
-				},
-				body: JSON.stringify({
-					name,
-					lastName,
-					middleName,
-					firstName,
-					phone,
-					latitude,
-					longitude
-				})
-			});
-
-			const result = await response.json();
-			await barangayStore.refresh();
-
-			showToast(toastStore, result.message, true);
-			drawerStore.close();
-		} catch (error) {
-			showToast(toastStore, error.message, false);
-			console.error(error);
-		}
-	}}
+	on:submit|preventDefault={handleSubmit}
 >
 	<h2 class="text-2xl font-bold mb-4">Create Barangay</h2>
 
@@ -186,9 +184,10 @@
 	<div class="flex justify-end space-x-4">
 		<button
 			type="submit"
-			class="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50"
+			disabled={isSubmitting}
+			class="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 disabled:opacity-50 disabled:cursor-not-allowed"
 		>
-			Submit
+			{isSubmitting ? 'Saving...' : 'Submit'}
 		</button>
 		<button
 			type="button"

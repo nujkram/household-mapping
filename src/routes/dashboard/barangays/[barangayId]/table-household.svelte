@@ -1,28 +1,31 @@
 <script lang="ts">
 	import type { Household } from '$lib/utils/types';
 	import { calculateAge } from '$lib/common/utils';
-	import { barangayStore } from '$lib/stores/barangayStore';
 	import { getToastStore } from '@skeletonlabs/skeleton';
+	import { debounce } from '$lib/utils/debounce';
 
 	export let data: Household[] = [];
 	export let handleClickView: (item: Household) => void;
 	export let handleClickUpdate: (item: Household) => void;
-	export let handleClickTag: (item: Household) => void;
-	// Make the table reactive to store changes and ensure it's always an array
-	$: households = Array.isArray(data) ? data : [];
 
 	const toastStore = getToastStore();
 	let selectedHousehold: any = null;
 	let isDropdownOpen = false;
 	let isProcessing = false;
+
+	// Search input is debounced so the table isn't re-filtered per keystroke.
+	let searchInput = '';
 	let searchQuery = '';
+	const applySearch = debounce((value: string) => (searchQuery = value), 250);
+	$: applySearch(searchInput);
+
 	let selectedTag: 'APIN' | 'KONTRA' | 'UNTAGGED' | '' = '';
 
 	// Filter households based on search query and tag
-	$: filteredHouseholds = data.filter((household: Household) => {
-		const matchesSearch = !searchQuery || 
-			household.fullName.toLowerCase().includes(searchQuery.toLowerCase());
-		
+	$: filteredHouseholds = (Array.isArray(data) ? data : []).filter((household: Household) => {
+		const matchesSearch =
+			!searchQuery || (household.fullName?.toLowerCase() || '').includes(searchQuery.toLowerCase());
+
 		const matchesTag = !selectedTag || household.tag === selectedTag;
 
 		return matchesSearch && matchesTag;
@@ -30,6 +33,10 @@
 
 	async function handleSetTag(household: Household, tag: 'APIN' | 'KONTRA' | 'UNTAGGED') {
 		isProcessing = true;
+		// Optimistically update the row; roll back if the server rejects it.
+		const previousTag = household.tag;
+		data = data.map((h) => (h._id === household._id ? { ...h, tag } : h));
+
 		try {
 			const response = await fetch('/api/admin/household/set-tag', {
 				method: 'POST',
@@ -44,9 +51,6 @@
 
 			const result = await response.json();
 			if (response.ok) {
-				// Update store to trigger reactivity
-				await barangayStore.refresh();
-
 				// Close dropdown
 				isDropdownOpen = false;
 				selectedHousehold = null;
@@ -57,15 +61,14 @@
 					background: 'variant-filled-success'
 				});
 			} else {
-				toastStore.trigger({
-					message: result.error || 'Failed to update tag',
-					background: 'variant-filled-error'
-				});
+				throw new Error(result.error || 'Failed to update tag');
 			}
 		} catch (error) {
+			// Roll back the optimistic change.
+			data = data.map((h) => (h._id === household._id ? { ...h, tag: previousTag } : h));
 			console.error('Error setting tag:', error);
 			toastStore.trigger({
-				message: 'Failed to update tag',
+				message: error instanceof Error ? error.message : 'Failed to update tag',
 				background: 'variant-filled-error'
 			});
 		} finally {
@@ -86,13 +89,13 @@
 <svelte:window on:click={handleClickOutside} />
 
 <!-- Add filters above the table -->
-<div class="flex gap-4 mb-4">
+<div class="flex flex-wrap gap-4 mb-4">
 	<!-- Search input -->
 	<div class="input-group input-group-divider grid-cols-[auto_1fr_auto]">
 		<div class="input-group-shim">🔍</div>
 		<input
 			type="search"
-			bind:value={searchQuery}
+			bind:value={searchInput}
 			placeholder="Search by name..."
 			class="input"
 		/>
@@ -125,6 +128,17 @@
 			</tr>
 		</thead>
 		<tbody>
+			{#if filteredHouseholds.length === 0}
+				<tr>
+					<td colspan="8" class="text-center py-8 opacity-60">
+						{#if (data?.length ?? 0) === 0}
+							No households in this barangay yet.
+						{:else}
+							No households match your search or filters.
+						{/if}
+					</td>
+				</tr>
+			{/if}
 			{#each filteredHouseholds as item, i}
 				<tr>
 					<td>{item.fullName}</td>

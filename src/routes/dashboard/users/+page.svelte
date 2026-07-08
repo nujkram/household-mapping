@@ -10,6 +10,8 @@
 	} from '@skeletonlabs/skeleton';
 	import type { DrawerSettings, PaginationSettings, TableSource } from '@skeletonlabs/skeleton';
 	import { goto } from '$app/navigation';
+	import TableSkeleton from '$lib/components/common/TableSkeleton.svelte';
+	import { debounce } from '$lib/utils/debounce';
 
 	let isReady: boolean = false;
 	let keyword: string = '';
@@ -57,11 +59,12 @@
 	const filterTable = (keyword: string) => {
 		paginationSettings.page = 0;
 		if (keyword.length > 0) {
+			const term = keyword.toLowerCase();
 			let filteredData = sourceData.filter((item: any) => {
 				return (
-					item.fullName.toLowerCase().includes(keyword.toLowerCase()) ||
-					item.email.toLowerCase().includes(keyword.toLowerCase()) ||
-					item.phone.toLowerCase().includes(keyword.toLowerCase())
+					(item.fullName?.toLowerCase() || '').includes(term) ||
+					(item.email?.toLowerCase() || '').includes(term) ||
+					(item.phone?.toLowerCase() || '').includes(term)
 				);
 			});
 
@@ -118,7 +121,9 @@
 		goto(`/dashboard/users/${e.detail[0]}`);
 	};
 
-	$: filterTable(keyword);
+	// Debounced so the table isn't re-filtered on every keystroke.
+	const applyFilter = debounce((value: string) => filterTable(value), 250);
+	$: applyFilter(keyword);
 </script>
 
 <div class="card mb-4">
@@ -163,13 +168,7 @@
 			</tr>
 		</thead>
 		<tbody>
-			<tr>
-				<td><div class="placeholder animate-pulse"></div></td>
-				<td><div class="placeholder animate-pulse"></div></td>
-				<td><div class="placeholder animate-pulse"></div></td>
-				<td><div class="placeholder animate-pulse"></div></td>
-				<td><div class="placeholder animate-pulse"></div></td>
-			</tr>
+			<TableSkeleton rows={5} cols={5} />
 		</tbody>
 	</table>
 {/if}

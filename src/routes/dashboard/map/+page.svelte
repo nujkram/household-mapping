@@ -1,55 +1,55 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import { browser } from '$app/environment';
+	import { onMount, onDestroy } from 'svelte';
+	import { MarkerClusterer } from '@googlemaps/markerclusterer';
+	import { loadGoogleMaps } from '$lib/utils/googleMaps';
+	import { escapeHtml } from '$lib/utils/stringHelper';
+	import { getTagColor, TAG_LEGEND, TAG_VALUES } from '$lib/utils/tagHelper';
 	import type { PageData } from './$types';
 
 	export let data: PageData;
 
 	let map: google.maps.Map;
-	let markers: google.maps.Marker[] = [];
+	let infoWindow: google.maps.InfoWindow;
+	let clusterer: MarkerClusterer;
+	let isLoading = true;
+	let loadError = '';
+	// Markers are keyed by household _id so we can reuse them across filter
+	// changes instead of destroying and recreating every marker each keystroke.
+	const markersById = new Map<string, google.maps.Marker>();
+
 	let searchTerm = '';
 	let selectedBarangay = '';
 	let selectedTag = '';
 	let mapElement: HTMLDivElement;
 
-	let filteredHouseholds = data.households;
-
+	// Debounced copy of the search term so we don't re-run the marker diff on
+	// every single keystroke.
+	let debouncedSearch = '';
+	let debounceTimer: ReturnType<typeof setTimeout>;
 	$: {
-		filteredHouseholds = data.households.filter((household) => {
-			const matchesSearch =
-				searchTerm === '' ||
-				(household.name && household.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
-				(household.barangayName &&
-					household.barangayName.toLowerCase().includes(searchTerm.toLowerCase()));
-
-			const matchesBarangay = selectedBarangay === '' || household.barangayId === selectedBarangay;
-
-			const matchesTag = selectedTag === '' || household.tag === selectedTag;
-
-			return matchesSearch && matchesBarangay && matchesTag;
-		});
-
-		if (map) {
-			updateMarkers();
-		}
+		clearTimeout(debounceTimer);
+		const next = searchTerm;
+		debounceTimer = setTimeout(() => (debouncedSearch = next), 250);
 	}
 
-	function getMarkerIcon(tag: string | null): google.maps.Symbol {
-		let fillColor: string;
-		switch (tag?.toUpperCase()) {
-			case 'APIN':
-				fillColor = '#4CAF50'; // green
-				break;
-			case 'KONTRA':
-				fillColor = '#2196F3'; // blue
-				break;
-			default:
-				fillColor = '#9E9E9E'; // gray
-		}
+	$: filteredHouseholds = data.households.filter((household: any) => {
+		const term = debouncedSearch.toLowerCase();
+		const matchesSearch =
+			term === '' ||
+			household.name?.toLowerCase().includes(term) ||
+			household.barangayName?.toLowerCase().includes(term);
+		const matchesBarangay = selectedBarangay === '' || household.barangayId === selectedBarangay;
+		const matchesTag = selectedTag === '' || (household.tag || 'UNTAGGED') === selectedTag;
+		return matchesSearch && matchesBarangay && matchesTag;
+	});
 
+	// Re-sync markers whenever the filtered set changes and the map is ready.
+	$: if (map && clusterer) syncMarkers(filteredHouseholds);
+
+	function getMarkerIcon(tag: string | null): google.maps.Symbol {
 		return {
 			path: google.maps.SymbolPath.CIRCLE,
-			fillColor: fillColor,
+			fillColor: getTagColor(tag),
 			fillOpacity: 0.8,
 			strokeColor: '#000000',
 			strokeWeight: 1,
@@ -57,77 +57,94 @@
 		};
 	}
 
-	function updateMarkers() {
-		// Clear existing markers
-		for (const marker of markers) {
-			marker.setMap(null);
-		}
-		markers = [];
-
-		for (const household of filteredHouseholds) {
-			// Validate that coordinates are valid numbers
-			const lat = Number.parseFloat(household.latitude);
-			const lng = Number.parseFloat(household.longitude);
-
-			if (
-				!Number.isNaN(lat) &&
-				!Number.isNaN(lng) &&
-				Number.isFinite(lat) &&
-				Number.isFinite(lng)
-			) {
-				const marker = new google.maps.Marker({
-					position: { lat, lng },
-					map: map,
-					icon: getMarkerIcon(household.tag)
-				});
-
-				const infoWindow = new google.maps.InfoWindow({
-					content: `
-						<div class="info-window text-black">
-							<strong>${household.fullName || 'Unnamed Household'}</strong><br>
-							Barangay: ${household.barangayName}<br>
-							Tag: ${household.tag || 'UNTAGGED'}<br>
-							Address: ${household.address || 'No address'}
-						</div>
-					`
-				});
-
-				marker.addListener('click', () => {
-					infoWindow.open(map, marker);
-				});
-
-				markers.push(marker);
-			}
-		}
+	function buildInfoContent(household: any): string {
+		return `
+			<div class="info-window text-black">
+				<strong>${escapeHtml(household.fullName || 'Unnamed Household')}</strong><br>
+				Barangay: ${escapeHtml(household.barangayName)}<br>
+				Tag: ${escapeHtml(household.tag || 'UNTAGGED')}<br>
+				Address: ${escapeHtml(household.address || 'No address')}
+			</div>
+		`;
 	}
 
-	onMount(() => {
-		if (browser) {
-			const script = document.createElement('script');
-			script.src = `https://maps.googleapis.com/maps/api/js?key=${import.meta.env.VITE_GOOGLE_MAPS_API_KEY}`;
-			script.async = true;
-			script.defer = true;
+	function syncMarkers(households: any[]) {
+		const nextIds = new Set<string>();
 
-			script.onload = () => {
-				// Initialize map
-				map = new google.maps.Map(mapElement, {
-					center: { lat: 11.442339253918387, lng: 122.69376754760742 },
-					zoom: 12,
-					styles: [
-						{
-							featureType: 'poi',
-							elementType: 'labels',
-							stylers: [{ visibility: 'off' }]
-						}
-					]
+		for (const household of households) {
+			const lat = Number.parseFloat(household.latitude);
+			const lng = Number.parseFloat(household.longitude);
+			if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+
+			nextIds.add(household._id);
+			const existing = markersById.get(household._id);
+
+			if (existing) {
+				// Reuse: only update what may have changed.
+				existing.setIcon(getMarkerIcon(household.tag));
+			} else {
+				// No `map` here — the clusterer owns marker attachment.
+				const marker = new google.maps.Marker({
+					position: { lat, lng },
+					icon: getMarkerIcon(household.tag)
 				});
-
-				// Add initial markers
-				updateMarkers();
-			};
-
-			document.head.appendChild(script);
+				marker.addListener('click', () => {
+					infoWindow.setContent(buildInfoContent(household));
+					infoWindow.open(map, marker);
+				});
+				markersById.set(household._id, marker);
+			}
 		}
+
+		// Drop markers no longer in the filtered set.
+		for (const [id] of markersById) {
+			if (!nextIds.has(id)) {
+				markersById.delete(id);
+			}
+		}
+
+		// Hand the current set to the clusterer — it groups nearby markers into
+		// cluster bubbles so thousands of households stay fast and readable.
+		clusterer.clearMarkers(true);
+		clusterer.addMarkers([...markersById.values()]);
+	}
+
+	onMount(async () => {
+		try {
+			const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+			if (!apiKey) {
+				loadError = 'Google Maps API key is missing';
+				console.error(loadError);
+				return;
+			}
+
+			await loadGoogleMaps(apiKey);
+
+			map = new google.maps.Map(mapElement, {
+				center: { lat: 11.442339253918387, lng: 122.69376754760742 },
+				zoom: 12,
+				styles: [
+					{ featureType: 'poi', elementType: 'labels', stylers: [{ visibility: 'off' }] }
+				]
+			});
+
+			// One shared InfoWindow reused for every marker.
+			infoWindow = new google.maps.InfoWindow();
+			clusterer = new MarkerClusterer({ map });
+
+			syncMarkers(filteredHouseholds);
+		} catch (error) {
+			loadError = 'Failed to load the map. Please try reloading the page.';
+			console.error('Error loading map:', error);
+		} finally {
+			isLoading = false;
+		}
+	});
+
+	onDestroy(() => {
+		clearTimeout(debounceTimer);
+		clusterer?.clearMarkers();
+		markersById.clear();
 	});
 </script>
 
@@ -136,45 +153,65 @@
 </svelte:head>
 
 <div class="container mx-auto p-4">
-	<div class="mb-4 flex gap-4">
+	<div class="mb-4 flex flex-wrap gap-4">
+		<label class="sr-only" for="map-search">Search households</label>
 		<input
+			id="map-search"
 			type="text"
 			bind:value={searchTerm}
 			placeholder="Search by name..."
 			class="input p-2 border rounded"
 		/>
 
-		<select bind:value={selectedBarangay} class="p-2 border rounded select">
+		<label class="sr-only" for="map-barangay">Filter by barangay</label>
+		<select id="map-barangay" bind:value={selectedBarangay} class="p-2 border rounded select">
 			<option value="">All Barangays</option>
 			{#each data.barangays as barangay}
 				<option value={barangay._id}>{barangay.name}</option>
 			{/each}
 		</select>
 
-		<select bind:value={selectedTag} class="p-2 border rounded select">
+		<label class="sr-only" for="map-tag">Filter by tag</label>
+		<select id="map-tag" bind:value={selectedTag} class="p-2 border rounded select">
 			<option value="">All Tags</option>
-			<option value="APIN">APIN</option>
-			<option value="KONTRA">KONTRA</option>
-			<option value="UNTAGGED">UNTAGGED</option>
+			{#each TAG_VALUES as tag}
+				<option value={tag}>{tag}</option>
+			{/each}
 		</select>
 
-		<div class="flex items-center gap-4 ml-auto">
-			<div class="flex items-center gap-2">
-				<div class="w-4 h-4 rounded-full bg-green-500"></div>
-				<span>APIN</span>
-			</div>
-			<div class="flex items-center gap-2">
-				<div class="w-4 h-4 rounded-full bg-blue-500"></div>
-				<span>KONTRA</span>
-			</div>
-			<div class="flex items-center gap-2">
-				<div class="w-4 h-4 rounded-full bg-gray-500"></div>
-				<span>UNTAGGED</span>
-			</div>
+		<div class="flex flex-wrap items-center gap-4 ml-auto">
+			{#each TAG_LEGEND as { label, swatchClass }}
+				<div class="flex items-center gap-2">
+					<div class="w-4 h-4 rounded-full {swatchClass}"></div>
+					<span>{label}</span>
+				</div>
+			{/each}
 		</div>
 	</div>
 
-	<div bind:this={mapElement} class="h-[600px] w-full rounded-lg shadow-lg"></div>
+	{#if !isLoading && !loadError}
+		<p class="text-sm opacity-60 mb-2">
+			Showing {filteredHouseholds.length} of {data.households.length} households
+		</p>
+	{/if}
+
+	<div class="relative">
+		<div bind:this={mapElement} class="h-[600px] w-full rounded-lg shadow-lg"></div>
+		{#if isLoading}
+			<div
+				class="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-surface-100/60 rounded-lg"
+			>
+				<div class="placeholder-circle animate-pulse w-16"></div>
+				<p class="opacity-70">Loading map…</p>
+			</div>
+		{:else if loadError}
+			<div
+				class="absolute inset-0 flex items-center justify-center bg-surface-100/60 rounded-lg"
+			>
+				<p class="text-error-500">{loadError}</p>
+			</div>
+		{/if}
+	</div>
 </div>
 
 <style>

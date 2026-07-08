@@ -34,6 +34,13 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 				path: '$createdBy',
 				preserveNullAndEmptyArrays: true
 			}
+		},
+		{
+			// Never ship the joined user's password hash / login tokens.
+			$project: {
+				'createdBy.services': 0,
+				'createdBy.emails': 0
+			}
 		}
 	];
 

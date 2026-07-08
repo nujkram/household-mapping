@@ -1,35 +1,38 @@
+import { json } from '@sveltejs/kit';
+import type { RequestHandler } from './$types';
 import clientPromise from '$lib/server/mongo';
-import { checkKey } from '$lib/utils/keyHelper';
+import { userUpdateSchema, badRequest } from '$lib/server/validation';
 
-/** @type {import('./$types').RequestHandler} */
-export const POST = async ({ request, locals }: any) => {
-	let data = await request.json();
+export const POST: RequestHandler = async ({ request, locals }) => {
+	if (!locals.user) return json({ status: 'Error', error: 'Unauthorized' }, { status: 401 });
+
+	const parsed = userUpdateSchema.safeParse(await request.json().catch(() => null));
+	if (!parsed.success) return badRequest(parsed.error);
+	const data = parsed.data;
+
 	const db = await clientPromise();
 	const User = db.collection('users');
 
-	data = checkKey(data);
-
-	const userUpdate = {
-		$set: {
-			updatedAt: new Date(),
-			fullName: `${data.firstName} ${data.lastName}`,
-			firstName: data.firstName,
-			lastName: data.lastName,
-			isActive: true,
-			role: data.role,
-			updatedBy: locals.user._id
+	const result = await User.updateOne(
+		{ _id: data._id },
+		{
+			$set: {
+				updatedAt: new Date(),
+				fullName: `${data.firstName} ${data.lastName}`,
+				firstName: data.firstName,
+				lastName: data.lastName,
+				phone: data.phone,
+				isActive: true,
+				// Validated against the role whitelist by userUpdateSchema.
+				role: data.role,
+				updatedBy: locals.user._id
+			}
 		}
-	};
+	);
 
-	const response = await User.updateOne({ _id: data._id }, userUpdate);
-
-	if (response) {
-		return new Response(
-			JSON.stringify({
-				status: 'Success',
-				message: 'Data updated successfully',
-				response
-			})
-		);
+	if (result.matchedCount === 0) {
+		return json({ status: 'Error', error: 'User not found' }, { status: 404 });
 	}
+
+	return json({ status: 'Success', message: 'Data updated successfully' });
 };

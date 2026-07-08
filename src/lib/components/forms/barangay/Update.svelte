@@ -2,13 +2,17 @@
 	import { onMount } from 'svelte';
 	import { focusTrap, type DrawerStore, getToastStore } from '@skeletonlabs/skeleton';
 	import { showToast } from '$lib/utils/toastHelper';
+	import { submitJson } from '$lib/utils/apiHelper';
 	import type { Barangay } from '$lib/utils/types';
 	import { barangayStore } from '$lib/stores/barangayStore';
 	import { loadGoogleMaps } from '$lib/utils/googleMaps';
 
 	export let drawerStore: DrawerStore;
 	export let data: Barangay;
+	/** Called after a successful update so the parent page can refresh its data. */
+	export let onSuccess: (() => void) | undefined = undefined;
 	const isFocused: boolean = true;
+	let isSubmitting = false;
 
 	let map: google.maps.Map;
 	let marker: google.maps.marker.AdvancedMarkerElement;
@@ -89,33 +93,21 @@
 			console.error(error);
 		}
 	});
-</script>
 
-<form
-	method="POST"
-	autocomplete="off"
-	class="p-6 space-y-4"
-	use:focusTrap={isFocused}
-	on:submit|preventDefault={async () => {
+	const handleSubmit = async () => {
+		if (isSubmitting) return;
+		isSubmitting = true;
 		try {
-			const response = await fetch('/api/admin/barangay/update', {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json'
-				},
-				body: JSON.stringify({
-					_id: data._id,
-					name: data.name,
-					lastName: data.lastName,
-					middleName: data.middleName,
-					firstName: data.firstName,
-					phone: data.phone,
-					latitude: data.latitude,
-					longitude: data.longitude
-				})
+			const result = await submitJson('/api/admin/barangay/update', {
+				_id: data._id,
+				name: data.name,
+				lastName: data.lastName,
+				middleName: data.middleName,
+				firstName: data.firstName,
+				phone: data.phone,
+				latitude: data.latitude,
+				longitude: data.longitude
 			});
-
-			const result = await response.json();
 
 			// Update the store immediately with the new data
 			barangayStore.edit({
@@ -125,14 +117,25 @@
 
 			// Then refresh from server to ensure consistency
 			await barangayStore.refresh();
+			onSuccess?.();
 
 			showToast(toastStore, result.message, true);
 			drawerStore.close();
 		} catch (error) {
-			showToast(toastStore, error.message, false);
+			showToast(toastStore, error instanceof Error ? error.message : 'Failed to update', false);
 			console.error(error);
+		} finally {
+			isSubmitting = false;
 		}
-	}}
+	};
+</script>
+
+<form
+	method="POST"
+	autocomplete="off"
+	class="p-6 space-y-4"
+	use:focusTrap={isFocused}
+	on:submit|preventDefault={handleSubmit}
 >
 	<h2 class="h4">Update Barangay {data.name}</h2>
 
@@ -220,9 +223,10 @@
 	<div class="flex flex-row gap-2 items-center justify-end mt-4">
 		<button
 			type="submit"
-			class="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50"
+			disabled={isSubmitting}
+			class="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 disabled:opacity-50 disabled:cursor-not-allowed"
 		>
-			Update
+			{isSubmitting ? 'Updating...' : 'Update'}
 		</button>
 		<button
 			type="button"

@@ -2,10 +2,12 @@
 	import { SHA256 } from 'crypto-js';
 	import { focusTrap, getToastStore } from '@skeletonlabs/skeleton';
 	import type { ToastSettings } from '@skeletonlabs/skeleton';
+	import { submitJson } from '$lib/utils/apiHelper';
 
 	export let drawerStore = () => {};
 	export let id: string;
 	let isFocused: boolean = true;
+	let isSubmitting = false;
 	let password: string, confirmPassword: string;
 
 	// toast settings
@@ -22,36 +24,32 @@
 	class="p-6"
 	use:focusTrap={isFocused}
 	on:submit|preventDefault={async () => {
+		if (isSubmitting) return;
+		if (password != confirmPassword) {
+			toastSettings.message = 'Password and confirm password does not match';
+			toastSettings.background = 'bg-red-500';
+			toastStore.trigger(toastSettings);
+			return;
+		}
+		isSubmitting = true;
 		try {
-			if (password != confirmPassword) {
-				toastSettings.message = 'Password and confirm password does not match';
-				toastSettings.background = 'bg-red-500';
-				toastStore.trigger(toastSettings);
-				return;
-			}
-			const hashedPassword = await SHA256(password).toString();
-			let response = await fetch('/api/admin/user/reset-password', {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json'
-				},
-				body: JSON.stringify({
-					_id: id,
-					password: hashedPassword
-				})
+			const hashedPassword = SHA256(password).toString();
+			const result = await submitJson('/api/admin/user/reset-password', {
+				_id: id,
+				password: hashedPassword
 			});
-
-			let result = await response.json();
 
 			toastSettings.message = result.message;
 			toastSettings.background = 'bg-green-500';
 			toastStore.trigger(toastSettings);
 			drawerStore.close();
 		} catch (error) {
-			toastSettings.message = error.message;
+			toastSettings.message = error instanceof Error ? error.message : 'Failed to reset password';
 			toastSettings.background = 'bg-red-500';
 			toastStore.trigger(toastSettings);
 			console.error(error);
+		} finally {
+			isSubmitting = false;
 		}
 	}}
 >
@@ -81,7 +79,9 @@
 	</label>
 
 	<div class="flex gap-4 place-content-end w-full">
-		<button type="submit" class="btn variant-filled-success mt-4">Update</button>
+		<button type="submit" disabled={isSubmitting} class="btn variant-filled-success mt-4"
+			>{isSubmitting ? 'Updating...' : 'Update'}</button
+		>
 		<button type="button" class="btn variant-filled mt-4" on:click={() => drawerStore.close()}
 			>Cancel</button
 		>

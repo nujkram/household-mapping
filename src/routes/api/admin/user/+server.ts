@@ -1,18 +1,15 @@
+import { json } from '@sveltejs/kit';
+import type { RequestHandler } from './$types';
 import clientPromise from '$lib/server/mongo';
 
-/** @type {import('./$types').RequestHandler} */
-export const GET = async ({ request }: any) => {
+export const GET: RequestHandler = async () => {
 	const db = await clientPromise();
 	const Users = db.collection('users');
 
-	const response = await Users.find({}).sort({ createdAt: -1 }).toArray();
+	// Never serialize password hashes or login tokens to the client.
+	const response = await Users.find({}, { projection: { services: 0 } })
+		.sort({ createdAt: -1 })
+		.toArray();
 
-	if (response) {
-		return new Response(
-			JSON.stringify({
-				status: 'Success',
-				response
-			})
-		);
-	}
+	return json({ status: 'Success', response });
 };

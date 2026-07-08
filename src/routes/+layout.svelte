@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/stores';
+	import { navigating } from '$app/stores';
 	import '../app.postcss';
 	import { AppShell, AppBar, initializeStores, Toast } from '@skeletonlabs/skeleton';
 
@@ -28,6 +29,12 @@
 	initializeStores();
 </script>
 
+<!-- Global navigation progress bar: instant feedback while the next page's
+     server load runs, so navigation never looks frozen. -->
+{#if $navigating}
+	<div class="nav-progress" aria-hidden="true"></div>
+{/if}
+
 <!-- App Shell -->
 <AppShell>
 	<svelte:fragment slot="header">
@@ -54,3 +61,32 @@
 	</div>
 </AppShell>
 <Toast />
+
+<style>
+	.nav-progress {
+		position: fixed;
+		top: 0;
+		left: 0;
+		right: 0;
+		height: 3px;
+		z-index: 9999;
+		background: linear-gradient(
+			90deg,
+			transparent,
+			rgb(var(--color-primary-500)),
+			transparent
+		);
+		background-size: 50% 100%;
+		background-repeat: no-repeat;
+		animation: nav-progress-slide 1s ease-in-out infinite;
+	}
+
+	@keyframes nav-progress-slide {
+		0% {
+			background-position: -50% 0;
+		}
+		100% {
+			background-position: 150% 0;
+		}
+	}
+</style>

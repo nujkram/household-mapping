@@ -1,31 +1,43 @@
+import { json } from '@sveltejs/kit';
+import type { RequestHandler } from './$types';
 import { id } from '$lib/common/utils';
 import clientPromise from '$lib/server/mongo';
-import { checkKey } from '$lib/utils/keyHelper';
+import { householdInsertSchema, badRequest } from '$lib/server/validation';
 
-/** @type {import('./$types').RequestHandler} */
-export const POST = async ({ request, locals }: any) => {
-	let data = await request.json();
+export const POST: RequestHandler = async ({ request, locals }) => {
+	if (!locals.user) return json({ status: 'Error', error: 'Unauthorized' }, { status: 401 });
+
+	const parsed = householdInsertSchema.safeParse(await request.json().catch(() => null));
+	if (!parsed.success) return badRequest(parsed.error);
+	const data = parsed.data;
+
 	const db = await clientPromise();
-	const Household = db.collection('households');
+	// String _ids (Meteor-style) — type the collection to accept them.
+	const Household = db.collection<{ _id: string; [key: string]: unknown }>('households');
 
-	data = checkKey(data);
+	const now = new Date();
+	const household = {
+		_id: id(),
+		barangayId: data.barangayId,
+		firstName: data.firstName,
+		middleName: data.middleName,
+		lastName: data.lastName,
+		fullName: `${data.firstName} ${data.middleName} ${data.lastName}`.replace(/\s+/g, ' ').trim(),
+		gender: data.gender,
+		dateOfBirth: data.dateOfBirth ?? null,
+		phone: data.phone,
+		isVoter: data.isVoter,
+		dependents: data.dependents,
+		dependentDetails: data.dependentDetails,
+		latitude: data.latitude,
+		longitude: data.longitude,
+		isActive: true,
+		createdAt: now,
+		updatedAt: now,
+		createdBy: locals.user._id,
+		updatedBy: locals.user._id
+	};
 
-	data._id = id();
-	data.fullName = `${data.firstName} ${data.middleName} ${data.lastName}`;
-	data.createdAt = new Date();
-	data.updatedAt = new Date();
-	data.createdBy = locals.user._id;
-	data.updatedBy = locals.user._id;
-	data.isActive = true;
-
-	const response = await Household.insertOne(data);
-	if (response) {
-		return new Response(
-			JSON.stringify({
-				status: 'Success',
-				message: 'Data inserted successfully',
-				response
-			})
-		);
-	}
+	await Household.insertOne(household);
+	return json({ status: 'Success', message: 'Data inserted successfully' });
 };

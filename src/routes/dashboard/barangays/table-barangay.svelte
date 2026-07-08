@@ -16,6 +16,11 @@
 			</tr>
 		</thead>
 		<tbody>
+			{#if data.length === 0}
+				<tr>
+					<td colspan="4" class="text-center py-8 opacity-60">No barangays yet.</td>
+				</tr>
+			{/if}
 			{#each data as item, i}
 				<tr>
 					<td>{item.name}</td>

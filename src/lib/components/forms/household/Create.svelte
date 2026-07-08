@@ -2,16 +2,20 @@
 	import { onMount } from 'svelte';
 	import { focusTrap, type DrawerStore, getToastStore } from '@skeletonlabs/skeleton';
 	import { showToast } from '$lib/utils/toastHelper';
+	import { submitJson } from '$lib/utils/apiHelper';
 	import { barangayStore } from '$lib/stores/barangayStore';
-	import type { Barangay, Dependents } from '$lib/utils/types';
+	import type { Barangay, Dependents, Household } from '$lib/utils/types';
 	import { loadGoogleMaps } from '$lib/utils/googleMaps';
 	import { id } from '$lib/common/utils';
-	import { householdStore } from '$lib/stores/householdStore';
+	import DependentFields from './DependentFields.svelte';
 
 	export let drawerStore: DrawerStore;
 	export let data: Barangay;
+	/** Called after a successful insert so the parent page can refresh its list. */
+	export let onSuccess: (() => void) | undefined = undefined;
 
 	const isFocused = true;
+	let isSubmitting = false;
 	let lastName: string;
 	let middleName: string;
 	let firstName: string;
@@ -25,12 +29,29 @@
 
 	let barangays: Barangay[] = [];
 	let dependentFields: Dependents[] = [];
+	let householdsForDependents: Household[] = [];
 
 	let map: google.maps.Map;
 	let marker: google.maps.marker.AdvancedMarkerElement;
 
 	// toast settings
 	const toastStore = getToastStore();
+
+	// Households in the selected barangay that a dependent can be linked to.
+	const fetchHouseholdsForDependents = async (barangayId: string) => {
+		if (!barangayId) return;
+		try {
+			const response = await fetch(`/api/admin/household/list/${barangayId}`, {
+				method: 'GET',
+				headers: { 'Content-Type': 'application/json' }
+			});
+			const result = await response.json();
+			householdsForDependents = result.response || [];
+		} catch (error) {
+			console.error('Failed to load households for linking:', error);
+			householdsForDependents = [];
+		}
+	};
 
 	onMount(async () => {
 		const apiKey: string = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
@@ -53,6 +74,8 @@
 
 			const result = await response.json();
 			barangays = result.response;
+
+			await fetchHouseholdsForDependents(data._id);
 		} catch (error) {
 			showToast(toastStore, 'Failed to load Google Maps', false);
 			console.error(error);
@@ -105,16 +128,6 @@
 		});
 	};
 
-	const updateDependentFullName = (dependent: Dependents, index: number) => {
-		// Convert names to uppercase
-		dependent.firstName = dependent.firstName.toUpperCase();
-		dependent.middleName = dependent.middleName?.toUpperCase() || '';
-		dependent.lastName = dependent.lastName.toUpperCase();
-		dependent.fullName = `${dependent.firstName} ${dependent.middleName} ${dependent.lastName}`
-			.trim()
-			.toUpperCase();
-	};
-
 	$: {
 		// Reset and regenerate dependent fields when dependents number changes
 		if (dependents) {
@@ -152,37 +165,33 @@
 	class="p-6 space-y-4"
 	use:focusTrap={isFocused}
 	on:submit|preventDefault={async () => {
+		if (isSubmitting) return;
+		isSubmitting = true;
 		try {
-			const response = await fetch('/api/admin/household/insert', {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json'
-				},
-				body: JSON.stringify({
-					barangayId: data._id,
-					lastName,
-					middleName,
-					firstName,
-					gender,
-					dateOfBirth,
-					phone,
-					isVoter,
-					dependents,
-					dependentDetails: dependentFields,
-					latitude,
-					longitude
-				})
+			const result = await submitJson('/api/admin/household/insert', {
+				barangayId: data._id,
+				lastName,
+				middleName,
+				firstName,
+				gender,
+				dateOfBirth,
+				phone,
+				isVoter,
+				dependents,
+				dependentDetails: dependentFields,
+				latitude,
+				longitude
 			});
-
-			const result = await response.json();
 			await barangayStore.refresh();
-			await householdStore.refresh();
+			onSuccess?.();
 
 			showToast(toastStore, result.message, true);
 			drawerStore.close();
 		} catch (error) {
-			showToast(toastStore, error.message, false);
+			showToast(toastStore, error instanceof Error ? error.message : 'Failed to save', false);
 			console.error(error);
+		} finally {
+			isSubmitting = false;
 		}
 	}}
 >
@@ -195,7 +204,11 @@
 	<div class="grid grid-cols-2 gap-2">
 		<label class="label">
 			<span>Barangay</span>
-			<select class="select" bind:value={data._id}>
+			<select
+				class="select"
+				bind:value={data._id}
+				on:change={() => fetchHouseholdsForDependents(data._id)}
+			>
 				{#each barangays as barangay}
 					<option value={barangay._id}>{barangay.name}</option>
 				{/each}
@@ -272,70 +285,7 @@
 			<input class="input" type="number" name="dependents" bind:value={dependents} required />
 		</label>
 
-		{#if dependentFields.length > 0}
-			<div class="col-span-2">
-				<h3 class="h3 mb-4">Dependent Details</h3>
-				{#each dependentFields as dependent, index}
-					<div class="card p-4 mb-4">
-						<h4 class="h4 mb-2">Dependent {index + 1}</h4>
-						<div class="grid grid-cols-2 gap-2">
-							<label class="label">
-								<span>First Name</span>
-								<input
-									class="input"
-									type="text"
-									placeholder="First Name"
-									bind:value={dependent.firstName}
-									on:input={() => updateDependentFullName(dependent, index)}
-									required
-								/>
-							</label>
-
-							<label class="label">
-								<span>Middle Name</span>
-								<input
-									class="input"
-									type="text"
-									placeholder="Middle Name"
-									bind:value={dependent.middleName}
-									on:input={() => updateDependentFullName(dependent, index)}
-								/>
-							</label>
-
-							<label class="label">
-								<span>Last Name</span>
-								<input
-									class="input"
-									type="text"
-									placeholder="Last Name"
-									bind:value={dependent.lastName}
-									on:input={() => updateDependentFullName(dependent, index)}
-									required
-								/>
-							</label>
-
-							<label class="label">
-								<span>Gender</span>
-								<select class="select" bind:value={dependent.gender}>
-									<option value="MALE">Male</option>
-									<option value="FEMALE">Female</option>
-								</select>
-							</label>
-
-							<label class="label">
-								<span>Date of Birth</span>
-								<input class="input" type="date" bind:value={dependent.dateOfBirth} required />
-							</label>
-
-							<label class="label flex items-center gap-2">
-								<span>Is Voter</span>
-								<input class="input w-4" type="checkbox" bind:checked={dependent.isVoter} />
-							</label>
-						</div>
-					</div>
-				{/each}
-			</div>
-		{/if}
+		<DependentFields bind:dependentFields households={householdsForDependents} />
 	</div>
 
 	<label class="hidden label">
@@ -351,9 +301,10 @@
 	<div class="flex justify-end space-x-4">
 		<button
 			type="submit"
-			class="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50"
+			disabled={isSubmitting}
+			class="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 disabled:opacity-50 disabled:cursor-not-allowed"
 		>
-			Submit
+			{isSubmitting ? 'Saving...' : 'Submit'}
 		</button>
 		<button
 			type="button"

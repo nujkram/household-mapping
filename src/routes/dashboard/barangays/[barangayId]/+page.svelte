@@ -9,15 +9,14 @@
 	import { showToast } from '$lib/utils/toastHelper';
 	import TableHousehold from './table-household.svelte';
 	import type { Household } from '$lib/utils/types';
-	import { barangayStore } from '$lib/stores/barangayStore';
-	import { goto } from '$app/navigation';
+	import { goto, invalidateAll } from '$app/navigation';
 
 	export let data;
-	const { barangayDetail: initialBarangayDetail } = data;
 
-	// Create a reactive store subscription
-	$: barangayDetail =
-		$barangayStore.find((b) => b._id === initialBarangayDetail._id) || initialBarangayDetail;
+	// Single source of truth: the server load (re-run via invalidateAll after
+	// edits). No more reconciling against the global barangay store.
+	// (Aggregation results are driver `Document`s; this app uses string _ids.)
+	$: barangayDetail = data.barangayDetail as any;
 
 	let selectedHousehold: Household;
 
@@ -56,19 +55,6 @@
 	const handleClickUpdate = (item: Household) => {
 		selectedHousehold = item;
 		drawerStore.open(drawerUpdateHousehold);
-	};
-
-	const handleClickTag = async (item: Household) => {
-		await fetch('/api/admin/household/set-tag', {
-			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json'
-			},
-			body: JSON.stringify({
-				householdId: item._id,
-				tag: item?.tag === 'APIN' ? 'KONTRA' : 'APIN'
-			})
-		});
 	};
 
 	const drawerStore = getDrawerStore();
@@ -186,23 +172,25 @@
 		<h2 class="h3">Household List</h2>
 	</header>
 	<section class="p-4">
-		{#key barangayDetail}
-			<TableHousehold
-				data={barangayDetail?.households || []}
-				{handleClickView}
-				{handleClickUpdate}
-				{handleClickTag}
-			/>
-		{/key}
+		<TableHousehold
+			data={barangayDetail?.households || []}
+			{handleClickView}
+			{handleClickUpdate}
+		/>
 	</section>
 </div>
 
 <Drawer>
 	{#if $drawerStore.id === 'createHousehold'}
-		<Create data={barangayDetail} {drawerStore} />
+		<Create data={barangayDetail} {drawerStore} onSuccess={() => invalidateAll()} />
 	{:else if $drawerStore.id === 'updateBarangay'}
-		<Update data={barangayDetail} {drawerStore} />
+		<Update data={barangayDetail} {drawerStore} onSuccess={() => invalidateAll()} />
 	{:else if $drawerStore.id === 'updateHousehold'}
-		<UpdateHousehold data={selectedHousehold} barangay={barangayDetail} {drawerStore} />
+		<UpdateHousehold
+			data={selectedHousehold}
+			barangay={barangayDetail}
+			{drawerStore}
+			onSuccess={() => invalidateAll()}
+		/>
 	{/if}
 </Drawer>

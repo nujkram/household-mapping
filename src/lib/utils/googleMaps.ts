@@ -11,11 +11,6 @@ export const loadGoogleMaps = async (apiKey: string, libraries: string[] = []): 
 		return loadingPromise;
 	}
 
-	// Add visualization library if not already included
-	if (!libraries.includes('visualization')) {
-		libraries.push('visualization');
-	}
-
 	loadingPromise = new Promise((resolve, reject) => {
 		try {
 			const script = document.createElement('script');

@@ -1,35 +1,16 @@
+import { json } from '@sveltejs/kit';
+import type { RequestHandler } from './$types';
 import clientPromise from '$lib/server/mongo';
 
-/** @type {import('./$types').RequestHandler} */
-export const GET = async ({ request }: any) => {
+export const GET: RequestHandler = async () => {
 	const db = await clientPromise();
 	const Barangay = db.collection('barangays');
 
-	const pipeline = [
-		{
-			$match: { isActive: true }
-		},
-		{
-			$lookup: {
-				from: 'households',
-				localField: '_id',
-				foreignField: 'barangayId',
-				as: 'households'
-			}
-		},
-		{
-			$sort: { name: 1 }
-		}
-	];
+	// Plain find — no household $lookup. This endpoint feeds dropdowns, the
+	// barangays table, and store refreshes after every form submit; embedding
+	// every household document made all of those pay for data nobody rendered.
+	// (The barangay detail page loads its own households in its page loader.)
+	const response = await Barangay.find({ isActive: true }).sort({ name: 1 }).toArray();
 
-	const response = await Barangay.aggregate(pipeline).toArray();
-
-	if (response) {
-		return new Response(
-			JSON.stringify({
-				status: 'Success',
-				response
-			})
-		);
-	}
+	return json({ status: 'Success', response });
 };

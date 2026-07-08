@@ -1,18 +1,8 @@
 import { redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
-import type { Barangay, User } from '$lib/utils/types';
+import type { Barangay, SessionUser } from '$lib/utils/types';
+import { ROLES } from '$lib/utils/roles';
 import clientPromise from '$lib/server/mongo';
-
-type LoadResult = {
-	user: User;
-	barangays: Barangay[];
-	households: { lat: number; lng: number; tag: string }[];
-	tagCounts: {
-		APIN: number;
-		KONTRA: number;
-		UNTAGGED: number;
-	};
-};
 
 type HouseholdDocument = {
 	latitude: string;
@@ -28,30 +18,59 @@ type HouseholdCoordinate = {
 
 export const ssr = false;
 
-export const load: PageServerLoad = async ({
-	locals
-}: Parameters<PageServerLoad>[0]): Promise<LoadResult> => {
+export const load: PageServerLoad = async ({ locals }) => {
 	if (!locals.user) {
 		throw redirect(302, '/auth/login');
 	}
 
-	// Add authorization check for ADMINISTRATOR role
-	if (locals.user.role !== 'ADMINISTRATOR') {
-		throw redirect(302, '/unauthorized');
-	}
-
+	const role = locals.user.role;
 	const db = await clientPromise();
-	const Barangay = db.collection('barangays');
 	const Household = db.collection('households');
 
-	// Separate queries for coordinates and tag counts
-	const [barangays, householdsWithCoords, allHouseholds] = await Promise.all([
+	// Tag counts are cheap and useful to every role.
+	const tagGroups = (await Household.aggregate([
+		{
+			$group: {
+				_id: { $ifNull: ['$tag', 'UNTAGGED'] },
+				count: { $sum: 1 }
+			}
+		}
+	]).toArray()) as { _id: string; count: number }[];
+
+	const tagCounts = { APIN: 0, KONTRA: 0, UNTAGGED: 0 };
+	for (const group of tagGroups) {
+		if (group._id === 'APIN' || group._id === 'KONTRA') {
+			tagCounts[group._id] = group.count;
+		} else {
+			// Any empty-string / legacy tag value folds into UNTAGGED.
+			tagCounts.UNTAGGED += group.count;
+		}
+	}
+
+	// Encoders and Grant Officers get a light, task-focused landing — skip the
+	// heavy map data entirely.
+	if (role !== ROLES.ADMINISTRATOR) {
+		let activeGrants = 0;
+		if (role === ROLES.GRANT_OFFICER) {
+			activeGrants = await db.collection('grants').countDocuments({ isActive: true });
+		}
+		return {
+			user: locals.user as SessionUser,
+			tagCounts,
+			activeGrants,
+			barangays: [] as Barangay[],
+			households: [] as HouseholdCoordinate[]
+		};
+	}
+
+	// Administrator: full overview with the household map.
+	const Barangay = db.collection('barangays');
+	const [barangays, householdsWithCoords] = await Promise.all([
 		Barangay.find().toArray(),
 		Household.find(
 			{ latitude: { $exists: true }, longitude: { $exists: true } },
 			{ projection: { latitude: 1, longitude: 1, tag: 1 } }
-		).toArray() as Promise<HouseholdDocument[]>,
-		Household.find({}, { projection: { tag: 1 } }).toArray()
+		).toArray() as unknown as Promise<HouseholdDocument[]>
 	]);
 
 	const householdCoordinates = householdsWithCoords
@@ -64,17 +83,11 @@ export const load: PageServerLoad = async ({
 		)
 		.filter((h: HouseholdCoordinate) => !Number.isNaN(h.lat) && !Number.isNaN(h.lng));
 
-	// Calculate tag counts from all households, not just those with coordinates
-	const tagCounts = {
-		APIN: allHouseholds.filter((h: { tag?: string }) => h.tag === 'APIN').length,
-		KONTRA: allHouseholds.filter((h: { tag?: string }) => h.tag === 'KONTRA').length,
-		UNTAGGED: allHouseholds.filter((h: { tag?: string }) => !h.tag || h.tag === 'UNTAGGED').length
-	};
-
 	return {
-		user: locals.user as User,
-		barangays,
+		user: locals.user as SessionUser,
+		barangays: barangays as unknown as Barangay[],
 		households: householdCoordinates,
-		tagCounts
+		tagCounts,
+		activeGrants: 0
 	};
 };

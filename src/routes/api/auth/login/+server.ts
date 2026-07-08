@@ -1,62 +1,60 @@
-import { error } from '@sveltejs/kit';
+import { error, json } from '@sveltejs/kit';
+import type { RequestHandler } from './$types';
 import clientPromise from '$lib/server/mongo';
-import { hashPassword } from '$lib/common/utils';
-import bcrypt from 'bcryptjs';
+import { verifyPassword, generateSessionToken } from '$lib/server/auth';
+import { dev } from '$app/environment';
 
-export const POST = async ({ request, cookies }) => {
+export const POST: RequestHandler = async ({ request, cookies }) => {
 	const { username, password } = await request.json();
+
+	if (!username || !password) {
+		throw error(400, 'Username and password are required');
+	}
 
 	const db = await clientPromise();
 	const Users = db.collection('users');
 
 	const user = await Users.findOne({ username });
 
-	if (!user) {
+	// Verify credentials. Guard against users with no stored bcrypt hash so we
+	// return a clean 401 instead of throwing.
+	const storedHash = user?.services?.password?.bcrypt;
+	if (!user || !storedHash || !(await verifyPassword(password, storedHash))) {
 		throw error(401, 'Invalid credentials');
 	}
 
-	// Verify password
-	const isValidPassword = await bcrypt.compare(password, user.services.password.bcrypt);
-	if (!isValidPassword) {
-		throw error(401, 'Invalid credentials');
-	}
+	// Issue a new session token: raw value goes to the client, only its hash is
+	// stored. $slice keeps the token list bounded (last 5 active sessions).
+	const { token, hashedToken } = generateSessionToken();
 
-	// Generate a new login token
-	const loginToken = crypto.randomUUID();
-	const hashedToken = await hashPassword(loginToken);
-
-	// Update user's login tokens
 	await Users.updateOne(
 		{ _id: user._id },
 		{
 			$push: {
 				'services.resume.loginTokens': {
-					hashedToken,
-					when: new Date()
+					$each: [{ hashedToken, when: new Date() }],
+					$slice: -5
 				}
 			}
 		}
 	);
 
-	// Set the cookie
-	cookies.set('meteor_login_token', hashedToken, {
+	cookies.set('meteor_login_token', token, {
 		path: '/',
 		httpOnly: true,
-		secure: process.env.NODE_ENV === 'production',
+		secure: !dev,
 		sameSite: 'lax',
 		maxAge: 60 * 60 * 24 * 7 // 1 week
 	});
 
-	return new Response(
-		JSON.stringify({
-			user: {
-				_id: user._id,
-				email: user.email,
-				firstName: user.firstName,
-				lastName: user.lastName,
-				role: user.role,
-				fullName: user.fullName
-			}
-		})
-	);
+	return json({
+		user: {
+			_id: user._id,
+			email: user.email,
+			firstName: user.firstName,
+			lastName: user.lastName,
+			role: user.role,
+			fullName: user.fullName
+		}
+	});
 };

@@ -19,6 +19,8 @@
 
 	const drawerStore = getDrawerStore();
 	const toastStore = getToastStore();
+	// Close any drawer left open by a previous page (drawer store is global).
+	drawerStore.close();
 
 	let map: google.maps.Map;
 	let marker: google.maps.Marker;

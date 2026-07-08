@@ -1,77 +1,59 @@
+import { json } from '@sveltejs/kit';
+import type { RequestHandler } from './$types';
 import clientPromise from '$lib/server/mongo';
-import { checkKey } from '$lib/utils/keyHelper';
+import { householdUpdateSchema, badRequest } from '$lib/server/validation';
 
 export const POST: RequestHandler = async ({ request, locals }) => {
+	if (!locals.user) return json({ status: 'Error', error: 'Unauthorized' }, { status: 401 });
+
+	const parsed = householdUpdateSchema.safeParse(await request.json().catch(() => null));
+	if (!parsed.success) return badRequest(parsed.error);
+	const data = parsed.data;
+
 	try {
-		let data = await request.json();
 		const db = await clientPromise();
 		const Household = db.collection('households');
 
-		data = checkKey(data);
-
-		// Find all households that have dependents linked to this household
-		const householdsWithLinkedDependents = await Household.find({
-			'dependentDetails.linkedHouseholdId': data._id
-		}).toArray();
-
-		// Update the latitude/longitude for linked dependents in those households
-		for (const household of householdsWithLinkedDependents) {
-			const updatedDependents = household.dependentDetails.map(dependent => {
-				if (dependent.linkedHouseholdId === data._id) {
-					return {
-						...dependent,
-						latitude: data.latitude,
-						longitude: data.longitude
-					};
+		// Propagate the new coordinates to every household that links this one as a
+		// dependent — in a single updateMany with array filters (was an N+1 loop).
+		await Household.updateMany(
+			{ 'dependentDetails.linkedHouseholdId': data._id },
+			{
+				$set: {
+					'dependentDetails.$[elem].latitude': data.latitude,
+					'dependentDetails.$[elem].longitude': data.longitude
 				}
-				return dependent;
-			});
+			},
+			{ arrayFilters: [{ 'elem.linkedHouseholdId': data._id }] }
+		);
 
-			await Household.updateOne(
-				{ _id: household._id },
-				{ $set: { dependentDetails: updatedDependents } }
-			);
-		}
-
-		const householdUpdate = {
-			$set: {
-				updatedAt: new Date(),
-				name: data.name,
-				lastName: data.lastName,
-				middleName: data.middleName,
-				firstName: data.firstName,
-				fullName: `${data.firstName} ${data.middleName} ${data.lastName}`,
-				phone: data.phone,
-				dateOfBirth: data.dateOfBirth,
-				dependents: data.dependents,
-				dependentDetails: data.dependentDetails,
-				isVoter: data.isVoter,
-				latitude: data.latitude,
-				longitude: data.longitude,
-				tag: data.tag,
-				updatedBy: locals.user._id
-			}
+		const set: Record<string, unknown> = {
+			updatedAt: new Date(),
+			lastName: data.lastName,
+			middleName: data.middleName,
+			firstName: data.firstName,
+			fullName: `${data.firstName} ${data.middleName} ${data.lastName}`.replace(/\s+/g, ' ').trim(),
+			gender: data.gender,
+			phone: data.phone,
+			dateOfBirth: data.dateOfBirth ?? null,
+			dependents: data.dependents,
+			dependentDetails: data.dependentDetails,
+			isVoter: data.isVoter,
+			latitude: data.latitude,
+			longitude: data.longitude,
+			updatedBy: locals.user._id
 		};
+		if (data.tag) set.tag = data.tag;
 
-		const response = await Household.updateOne({ _id: data._id }, householdUpdate);
+		const result = await Household.updateOne({ _id: data._id }, { $set: set });
 
-		if (response) {
-			return new Response(
-				JSON.stringify({
-					status: 'Success',
-					message: 'Data updated successfully',
-					response
-				})
-			);
+		if (result.matchedCount === 0) {
+			return json({ status: 'Error', error: 'Household not found' }, { status: 404 });
 		}
+
+		return json({ status: 'Success', message: 'Data updated successfully' });
 	} catch (error) {
 		console.error('Error updating household:', error);
-		return new Response(
-			JSON.stringify({
-				status: 'Error',
-				message: 'Failed to update household'
-			}),
-			{ status: 500 }
-		);
+		return json({ status: 'Error', error: 'Failed to update household' }, { status: 500 });
 	}
 };

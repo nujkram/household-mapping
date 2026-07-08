@@ -26,9 +26,8 @@
 	}
 
 	const redirect = () => {
-		if (data.user.role === 'ADMINISTRATOR') goto('/dashboard');
-		else if (data.user.role === 'JUDGE') goto(`/judge/${data.user._id}`);
-		else goto('/');
+		// All dashboard roles land on the role-aware dashboard home.
+		goto('/dashboard');
 	};
 
 	const handleLogin = async (): Promise<void> => {
@@ -52,10 +51,8 @@
 			toastSettings.background = 'bg-green-500';
 			toastStore.trigger(toastSettings);
 
-			// The page will automatically refresh with the new session
-			if (data.user.role === 'ADMINISTRATOR') {
-				goto('/dashboard');
-			}
+			// All dashboard roles land on the role-aware dashboard home.
+			goto('/dashboard');
 		} catch (error) {
 			toastSettings.message = error.message || 'Invalid username or password';
 			toastSettings.background = 'bg-red-500';

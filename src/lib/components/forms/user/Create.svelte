@@ -3,10 +3,12 @@
 	import { SHA256 } from 'crypto-js';
 	import { focusTrap, getToastStore } from '@skeletonlabs/skeleton';
 	import type { ToastSettings } from '@skeletonlabs/skeleton';
+	import { submitJson } from '$lib/utils/apiHelper';
 
 	export const drawerStore = () => {};
 
 	const isFocused = true;
+	let isSubmitting = false;
 	let lastName: string;
 	let firstName: string;
 	let username: string;
@@ -44,41 +46,37 @@
 	class="p-6"
 	use:focusTrap={isFocused}
 	on:submit|preventDefault={async () => {
+		if (isSubmitting) return;
+		if (password != confirmPassword) {
+			toastSettings.message = 'Password and Confirm Password does not match';
+			toastSettings.background = 'bg-red-500';
+			toastStore.trigger(toastSettings);
+			return;
+		}
+		isSubmitting = true;
 		try {
-			if (password != confirmPassword) {
-				toastSettings.message = 'Password and Confirm Password does not match';
-				toastSettings.background = 'bg-red-500';
-				toastStore.trigger(toastSettings);
-				return;
-			}
-			const hashedPassword = await SHA256(password).toString();
-			let response = await fetch('/api/admin/user/insert', {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json'
-				},
-				body: JSON.stringify({
-					username: username,
-					lastName: lastName,
-					firstName: firstName,
-					password: hashedPassword,
-					email: email,
-					phone: phone,
-					role: role
-				})
+			const hashedPassword = SHA256(password).toString();
+			const result = await submitJson('/api/admin/user/insert', {
+				username,
+				lastName,
+				firstName,
+				password: hashedPassword,
+				email,
+				phone,
+				role
 			});
-
-			let result = await response.json();
 
 			toastSettings.message = result.message;
 			toastSettings.background = 'bg-green-500';
 			toastStore.trigger(toastSettings);
 			window.location.reload();
 		} catch (error) {
-			toastSettings.message = error.message;
+			toastSettings.message = error instanceof Error ? error.message : 'Failed to create user';
 			toastSettings.background = 'bg-red-500';
 			toastStore.trigger(toastSettings);
 			console.error(error);
+		} finally {
+			isSubmitting = false;
 		}
 	}}
 >
@@ -130,7 +128,9 @@
 	<label class="label mt-4">
 		<span>Role</span>
 		<select class="select" bind:value={role} required>
-			<option value="ADMINISTRATOR">Admin</option>
+			<option value="ADMINISTRATOR">Administrator — full access</option>
+			<option value="ENCODER">Encoder — tags & edits households</option>
+			<option value="GRANT_OFFICER">Grant Officer — awards grants</option>
 		</select>
 	</label>
 	<hr class="mt-4" />
@@ -169,7 +169,9 @@
 	</label>
 
 	<div class="flex gap-4 place-content-end w-full">
-		<button type="submit" class="btn variant-filled-success mt-4">Submit</button>
+		<button type="submit" disabled={isSubmitting} class="btn variant-filled-success mt-4"
+			>{isSubmitting ? 'Saving...' : 'Submit'}</button
+		>
 		<button type="button" class="btn variant-filled mt-4" on:click={() => drawerStore.close()}
 			>Cancel</button
 		>

@@ -1,13 +1,17 @@
 // See https://kit.svelte.dev/docs/types#app
 // for information about these interfaces
 // and what to do when importing types
-import type { User } from '$lib/utils/types';
+import type { SessionUser } from '$lib/utils/types';
 
-declare namespace App {
-	interface Locals {
-		user: User | null;
+declare global {
+	namespace App {
+		interface Locals {
+			user: SessionUser | null;
+		}
+		// interface PageData {}
+		// interface Error {}
+		// interface Platform {}
 	}
-	// interface PageData {}
-	// interface Error {}
-	// interface Platform {}
 }
+
+export {};

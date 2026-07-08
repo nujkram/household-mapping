@@ -1,31 +1,39 @@
+import { json } from '@sveltejs/kit';
+import type { RequestHandler } from './$types';
 import { id } from '$lib/common/utils';
 import clientPromise from '$lib/server/mongo';
-import { checkKey } from '$lib/utils/keyHelper';
+import { barangayInsertSchema, badRequest } from '$lib/server/validation';
 
-/** @type {import('./$types').RequestHandler} */
-export const POST = async ({ request, locals }: any) => {
-	let data = await request.json();
+export const POST: RequestHandler = async ({ request, locals }) => {
+	if (!locals.user) return json({ status: 'Error', error: 'Unauthorized' }, { status: 401 });
+
+	const parsed = barangayInsertSchema.safeParse(await request.json().catch(() => null));
+	if (!parsed.success) return badRequest(parsed.error);
+	const data = parsed.data;
+
 	const db = await clientPromise();
-	const Barangay = db.collection('barangays');
+	// This app uses string _ids (Meteor-style); type the collection so inserts
+	// with a string _id typecheck against the driver's ObjectId default.
+	const Barangay = db.collection<{ _id: string; [key: string]: unknown }>('barangays');
 
-	data = checkKey(data);
+	const now = new Date();
+	const barangay = {
+		_id: id(),
+		name: data.name,
+		firstName: data.firstName,
+		middleName: data.middleName,
+		lastName: data.lastName,
+		fullName: `${data.firstName} ${data.middleName} ${data.lastName}`.replace(/\s+/g, ' ').trim(),
+		phone: data.phone,
+		latitude: data.latitude,
+		longitude: data.longitude,
+		isActive: true,
+		createdAt: now,
+		updatedAt: now,
+		createdBy: locals.user._id,
+		updatedBy: locals.user._id
+	};
 
-	data._id = id();
-	data.fullName = `${data.firstName} ${data.middleName} ${data.lastName}`;
-	data.createdAt = new Date();
-	data.updatedAt = new Date();
-	data.createdBy = locals.user._id;
-	data.updatedBy = locals.user._id;
-	data.isActive = true;
-
-	const response = await Barangay.insertOne(data);
-	if (response) {
-		return new Response(
-			JSON.stringify({
-				status: 'Success',
-				message: 'Data inserted successfully',
-				response
-			})
-		);
-	}
+	await Barangay.insertOne(barangay);
+	return json({ status: 'Success', message: 'Data inserted successfully' });
 };

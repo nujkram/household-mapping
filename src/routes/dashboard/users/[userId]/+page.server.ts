@@ -25,6 +25,14 @@ export async function load({ params }) {
 				path: '$createdBy',
 				preserveNullAndEmptyArrays: true
 			}
+		},
+		{
+			// Strip password hashes / login tokens from both the user and the
+			// joined createdBy document before sending to the client.
+			$project: {
+				services: 0,
+				'createdBy.services': 0
+			}
 		}
 	];
 

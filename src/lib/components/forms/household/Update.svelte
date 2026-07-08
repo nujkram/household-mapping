@@ -6,13 +6,16 @@
 	import { barangayStore } from '$lib/stores/barangayStore';
 	import { loadGoogleMaps } from '$lib/utils/googleMaps';
 	import { id } from '$lib/common/utils';
-	import { householdStore } from '$lib/stores/householdStore';
+	import DependentFields from './DependentFields.svelte';
 
 	export let drawerStore: DrawerStore;
 	export let data: Household;
 	export let barangay: Barangay;
+	/** Called after a successful update so the parent page can refresh its list. */
+	export let onSuccess: (() => void) | undefined = undefined;
 
 	const isFocused = true;
+	let isSubmitting = false;
 	let isLoading = true;
 	let isInitializing = true;
 	let barangays: Barangay[] = [];
@@ -20,9 +23,6 @@
 	let map: google.maps.Map;
 	let marker: google.maps.Marker;
 	let householdsForDependents: Household[] = [];
-	let searchQuery = '';
-	let filteredHouseholds: Household[] = [];
-	let selectedHouseholdId = '';
 
 	// toast settings
 	const toastStore = getToastStore();
@@ -126,69 +126,6 @@
 		});
 	};
 
-	const updateDependentFullName = (dependent: Dependents, index: number) => {
-		// Convert names to uppercase
-		dependent.firstName = dependent.firstName.toUpperCase();
-		dependent.middleName = dependent.middleName?.toUpperCase() || '';
-		dependent.lastName = dependent.lastName.toUpperCase();
-		dependent.fullName = `${dependent.firstName} ${dependent.middleName} ${dependent.lastName}`
-			.trim()
-			.toUpperCase();
-	};
-
-	const filterHouseholds = (query: string) => {
-		if (!query?.trim()) {
-			filteredHouseholds = [];
-			return;
-		}
-
-		const searchTerm = query.toLowerCase();
-		filteredHouseholds = householdsForDependents
-			.filter(
-				(h) =>
-					h.fullName.toLowerCase().includes(searchTerm) ||
-					h.firstName.toLowerCase().includes(searchTerm) ||
-					h.lastName.toLowerCase().includes(searchTerm)
-			)
-			.slice(0, 5); // Limit to 5 results
-	};
-
-	const applyHouseholdToDependent = (household: Household, dependentIndex: number) => {
-		// Apply to the specified dependent
-		const dependent = dependentFields[dependentIndex];
-		if (dependent) {
-			dependent.linkedHouseholdId = household._id;
-			dependent.firstName = household.firstName;
-			dependent.middleName = household.middleName;
-			dependent.lastName = household.lastName;
-			dependent.fullName = household.fullName;
-			dependent.dateOfBirth = household.dateOfBirth;
-			dependent.gender = household.gender;
-			dependent.isVoter = household.isVoter;
-		}
-		// Clear the search
-		searchQuery = '';
-		filteredHouseholds = [];
-	};
-
-	const clearHouseholdLink = (dependentIndex: number) => {
-		const dependent = dependentFields[dependentIndex];
-		if (dependent) {
-			// Clear all fields
-			dependent.linkedHouseholdId = '';
-			dependent.firstName = '';
-			dependent.middleName = '';
-			dependent.lastName = '';
-			dependent.fullName = '';
-			dependent.dateOfBirth = '';
-			dependent.gender = 'MALE';
-			dependent.isVoter = false;
-			
-			// Force Svelte to update the array by creating a new reference
-			dependentFields = [...dependentFields];
-		}
-	};
-
 	$: {
 		if (data.dependents) {
 			const newLength = Number.parseInt(data.dependents.toString());
@@ -261,6 +198,8 @@
 	class="p-6 space-y-4"
 	use:focusTrap={isFocused}
 	on:submit|preventDefault={async () => {
+		if (isSubmitting) return;
+		isSubmitting = true;
 		try {
 			const response = await fetch('/api/admin/household/update', {
 				method: 'POST',
@@ -288,9 +227,10 @@
 			const result = await response.json();
 
 			if (response.ok) {
-				// First refresh the stores
+				// Refresh the barangay store (used by the barangay detail pages) and
+				// let the parent page refresh its own list.
 				await barangayStore.refresh();
-				await householdStore.refresh();
+				onSuccess?.();
 
 				showToast(toastStore, result.message, true);
 				drawerStore.close();
@@ -304,6 +244,8 @@
 				false
 			);
 			console.error(error);
+		} finally {
+			isSubmitting = false;
 		}
 	}}
 >
@@ -401,109 +343,7 @@
 			<input class="input" type="number" name="dependents" bind:value={data.dependents} />
 		</label>
 
-		{#if dependentFields.length > 0}
-			<div class="col-span-2 space-y-4">
-				<h3 class="h3 mb-4">Dependent Details</h3>
-				{#each dependentFields as dependent, index}
-					<div class="card p-4 mb-4">
-						<h4 class="h4 mb-2">Dependent {index + 1}</h4>
-						<div class="label col-span-2 relative mb-4">
-							<span>Link to Existing Household (Optional)</span>
-							{#if dependent.linkedHouseholdId}
-								<div class="flex items-center gap-2 mt-2">
-									<span class="text-sm">Linked to: {dependent.fullName}</span>
-									<button
-										type="button"
-										class="btn btn-sm variant-filled-error"
-										on:click={() => clearHouseholdLink(index)}
-									>
-										Clear Link
-									</button>
-								</div>
-							{:else}
-								<input
-									class="input"
-									type="text"
-									placeholder="Search for household..."
-									on:input={(e) => filterHouseholds(e.target.value)}
-								/>
-
-								{#if filteredHouseholds.length > 0}
-									<div
-										class="absolute z-50 w-full bg-surface-100-800-token border border-surface-500-400-token rounded-md mt-1 max-h-48 overflow-y-auto"
-									>
-										{#each filteredHouseholds as household}
-											<button
-												class="w-full text-left px-4 py-2 hover:bg-surface-hover-token"
-												type="button"
-												on:click={() => applyHouseholdToDependent(household, index)}
-											>
-												{household.fullName}
-											</button>
-										{/each}
-									</div>
-								{/if}
-							{/if}
-						</div>
-
-						<div class="grid grid-cols-2 gap-2">
-							<label class="label">
-								<span>First Name</span>
-								<input
-									class="input"
-									type="text"
-									placeholder="First Name"
-									bind:value={dependent.firstName}
-									on:change={() => updateDependentFullName(dependent, index)}
-									required
-								/>
-							</label>
-
-							<label class="label">
-								<span>Middle Name</span>
-								<input
-									class="input"
-									type="text"
-									placeholder="Middle Name"
-									bind:value={dependent.middleName}
-									on:change={() => updateDependentFullName(dependent, index)}
-								/>
-							</label>
-
-							<label class="label">
-								<span>Last Name</span>
-								<input
-									class="input"
-									type="text"
-									placeholder="Last Name"
-									bind:value={dependent.lastName}
-									on:change={() => updateDependentFullName(dependent, index)}
-									required
-								/>
-							</label>
-
-							<label class="label">
-								<span>Gender</span>
-								<select class="select" bind:value={dependent.gender}>
-									<option value="MALE">Male</option>
-									<option value="FEMALE">Female</option>
-								</select>
-							</label>
-
-							<label class="label">
-								<span>Date of Birth</span>
-								<input class="input" type="date" bind:value={dependent.dateOfBirth} required />
-							</label>
-
-							<label class="label flex items-center gap-2">
-								<span>Is Voter</span>
-								<input class="input w-4" type="checkbox" bind:checked={dependent.isVoter} />
-							</label>
-						</div>
-					</div>
-				{/each}
-			</div>
-		{/if}
+		<DependentFields bind:dependentFields households={householdsForDependents} />
 	</div>
 
 	<label class="hidden label">
@@ -526,9 +366,10 @@
 	<div class="flex justify-end space-x-4">
 		<button
 			type="submit"
-			class="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50"
+			disabled={isSubmitting}
+			class="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 disabled:opacity-50 disabled:cursor-not-allowed"
 		>
-			Update
+			{isSubmitting ? 'Updating...' : 'Update'}
 		</button>
 		<button
 			type="button"

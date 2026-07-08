@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import clientPromise from '$lib/server/mongo';
-import { ObjectId } from 'mongodb';
+import { canEditHouseholds } from '$lib/utils/roles';
 
 // Define the valid tag values
 type HouseholdTag = 'APIN' | 'KONTRA' | 'UNTAGGED';
@@ -10,26 +10,23 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	try {
 		const { householdId, tag } = await request.json();
 
-		if (locals?.user?.role !== 'ADMINISTRATOR') {
-			return json({
-				status: 401,
-				error: 'Unauthorized'
-			});
+		// Real HTTP status codes so callers' `response.ok` checks work.
+		// Admins and Encoders may tag (the central hook guard enforces this too).
+		const user = locals.user;
+		if (!user || !canEditHouseholds(user.role)) {
+			return json({ error: 'Unauthorized' }, { status: 401 });
 		}
 
 		if (!householdId) {
-			return json({
-				status: 400,
-				error: 'Household ID is required'
-			});
+			return json({ error: 'Household ID is required' }, { status: 400 });
 		}
 
 		const validTags: HouseholdTag[] = ['APIN', 'KONTRA', 'UNTAGGED'];
 		if (tag && !validTags.includes(tag as HouseholdTag)) {
-			return json({
-				status: 400,
-				error: 'Invalid tag value. Must be APIN, KONTRA, or UNTAGGED'
-			});
+			return json(
+				{ error: 'Invalid tag value. Must be APIN, KONTRA, or UNTAGGED' },
+				{ status: 400 }
+			);
 		}
 
 		const db = await clientPromise();
@@ -37,25 +34,18 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 		const result = await collection.updateOne(
 			{ _id: householdId },
-			{ $set: { tag: tag || 'UNTAGGED' } }
+			{ $set: { tag: tag || 'UNTAGGED', updatedAt: new Date(), updatedBy: user._id } }
 		);
 
 		if (result.matchedCount === 0) {
-			return json({
-				status: 404,
-				error: 'Household not found'
-			});
+			return json({ error: 'Household not found' }, { status: 404 });
 		}
 
 		return json({
-			status: 200,
 			message: `Household tagged as ${tag || 'UNTAGGED'} successfully`
 		});
 	} catch (error) {
 		console.error('Error updating household tag:', error);
-		return json({
-			status: 500,
-			error: 'Failed to update household tag'
-		});
+		return json({ error: 'Failed to update household tag' }, { status: 500 });
 	}
 };

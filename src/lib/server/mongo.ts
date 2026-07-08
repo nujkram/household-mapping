@@ -1,16 +1,12 @@
 import { dev } from '$app/environment';
 import dotenv from 'dotenv';
 dotenv.config();
-import { MongoClient } from 'mongodb';
+import { MongoClient, type Db } from 'mongodb';
 
 const uri = process.env['DATABASE_URL'];
 
-const options = {
-	useUnifiedTopology: true,
-	useNewUrlParser: true
-};
-
-let cachedDb: any;
+let cachedDb: Db | null = null;
+let indexesEnsured = false;
 
 if (!uri) {
 	throw new Error('Please DATABASE_URL to your environment');
@@ -24,10 +20,37 @@ if (dev && uri?.includes('Test')) {
 	console.info('🚨 You are using Test database in development mode 🚨');
 }
 
-const connectToDatabase = async () => {
+/**
+ * Create the indexes our query patterns rely on. `createIndex` is idempotent, so
+ * this is safe to call on every cold start; it's a no-op once the index exists.
+ * The login-token index is the most important — that lookup runs on every
+ * request in hooks.server.ts.
+ */
+const ensureIndexes = async (db: Db): Promise<void> => {
+	if (indexesEnsured) return;
+	indexesEnsured = true;
+	try {
+		await Promise.all([
+			db.collection('users').createIndex({ 'services.resume.loginTokens.hashedToken': 1 }),
+			db.collection('users').createIndex({ username: 1 }),
+			db.collection('households').createIndex({ barangayId: 1 }),
+			db.collection('households').createIndex({ isActive: 1 }),
+			db.collection('households').createIndex({ 'dependentDetails.linkedHouseholdId': 1 }),
+			db.collection('households').createIndex({ 'grants.grantId': 1 }),
+			db.collection('grants').createIndex({ name: 1, year: 1 }),
+			db.collection('barangays').createIndex({ isActive: 1, name: 1 })
+		]);
+	} catch (error) {
+		// Don't take the app down if index creation fails (e.g. read-only user).
+		indexesEnsured = false;
+		console.error('Failed to ensure MongoDB indexes:', error);
+	}
+};
+
+const connectToDatabase = async (): Promise<Db> => {
 	if (cachedDb) return cachedDb;
 
-	const client = await MongoClient.connect(uri, options);
+	const client = await MongoClient.connect(uri as string);
 
 	const currentDb = uri?.includes('Staging')
 		? 'householdStaging'
@@ -35,13 +58,13 @@ const connectToDatabase = async () => {
 			? 'householdTest'
 			: 'householdProduction';
 
-	const db = await client.db(currentDb);
+	const db = client.db(currentDb);
 	cachedDb = db;
+	await ensureIndexes(db);
 	return db;
 };
-const clientPromise = async () => await connectToDatabase();
-// cachedDb = new MongoClient(uri, options);
-// clientPromise = cachedDb.connect();
+
+const clientPromise = async (): Promise<Db> => await connectToDatabase();
 
 // Export a module-scoped MongoClient promise.
 // By doing this in a separate module,
