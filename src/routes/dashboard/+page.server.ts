@@ -59,19 +59,139 @@ export const load: PageServerLoad = async ({ locals }) => {
 			tagCounts,
 			activeGrants,
 			barangays: [] as Barangay[],
-			households: [] as HouseholdCoordinate[]
+			households: [] as HouseholdCoordinate[],
+			analytics: null
 		};
 	}
 
-	// Administrator: full overview with the household map.
+	// Administrator: full overview — map data plus analytics for KPIs/charts.
 	const Barangay = db.collection('barangays');
-	const [barangays, householdsWithCoords] = await Promise.all([
+	const Grant = db.collection('grants');
+
+	// Everything the KPI tiles and charts need, in one pass over households.
+	const facetPromise = Household.aggregate([
+		{ $match: { isActive: true } },
+		{
+			$facet: {
+				total: [{ $count: 'count' }],
+				voters: [{ $match: { isVoter: true } }, { $count: 'count' }],
+				located: [
+					{ $match: { latitude: { $exists: true, $nin: [null, ''] } } },
+					{ $count: 'count' }
+				],
+				perBarangayTag: [
+					{
+						$group: {
+							_id: { barangayId: '$barangayId', tag: { $ifNull: ['$tag', 'UNTAGGED'] } },
+							count: { $sum: 1 }
+						}
+					}
+				],
+				reached: [{ $match: { 'grants.0': { $exists: true } } }, { $count: 'count' }],
+				awardsTotal: [{ $unwind: '$grants' }, { $count: 'count' }],
+				awardsByMonth: [
+					{ $unwind: '$grants' },
+					{ $match: { 'grants.receivedAt': { $type: 'date' } } },
+					{
+						$group: {
+							_id: { $dateToString: { format: '%Y-%m', date: '$grants.receivedAt' } },
+							count: { $sum: 1 }
+						}
+					},
+					{ $sort: { _id: 1 } }
+				]
+			}
+		}
+	]).toArray();
+
+	const [barangays, householdsWithCoords, facets, activeGrants, totalGrants] = await Promise.all([
 		Barangay.find().toArray(),
 		Household.find(
 			{ latitude: { $exists: true }, longitude: { $exists: true } },
 			{ projection: { latitude: 1, longitude: 1, tag: 1 } }
-		).toArray() as unknown as Promise<HouseholdDocument[]>
+		).toArray() as unknown as Promise<HouseholdDocument[]>,
+		facetPromise,
+		Grant.countDocuments({ isActive: true }),
+		Grant.countDocuments({})
 	]);
+
+	const facet = facets[0] ?? {};
+	const firstCount = (arr: { count?: number }[] | undefined): number => arr?.[0]?.count ?? 0;
+
+	// Households per barangay, segmented by tag — top 10 plus an "Other" bucket.
+	const barangayNames = new Map(barangays.map((b: any) => [b._id, b.name] as [string, string]));
+	const perBarangay = new Map<
+		string,
+		{ name: string; APIN: number; KONTRA: number; UNTAGGED: number; total: number }
+	>();
+	for (const g of (facet.perBarangayTag ?? []) as {
+		_id: { barangayId: string; tag: string };
+		count: number;
+	}[]) {
+		const key = g._id.barangayId ?? 'unknown';
+		const row =
+			perBarangay.get(key) ??
+			({
+				name: barangayNames.get(key) || 'Unknown',
+				APIN: 0,
+				KONTRA: 0,
+				UNTAGGED: 0,
+				total: 0
+			} as const as any);
+		const tag = g._id.tag === 'APIN' || g._id.tag === 'KONTRA' ? g._id.tag : 'UNTAGGED';
+		row[tag] += g.count;
+		row.total += g.count;
+		perBarangay.set(key, row);
+	}
+	const barangayRows = [...perBarangay.values()].sort((a, b) => b.total - a.total);
+	const topBarangays = barangayRows.slice(0, 10);
+	const rest = barangayRows.slice(10);
+	if (rest.length > 0) {
+		topBarangays.push(
+			rest.reduce(
+				(acc, r) => ({
+					name: `Other (${rest.length} barangays)`,
+					APIN: acc.APIN + r.APIN,
+					KONTRA: acc.KONTRA + r.KONTRA,
+					UNTAGGED: acc.UNTAGGED + r.UNTAGGED,
+					total: acc.total + r.total
+				}),
+				{ name: '', APIN: 0, KONTRA: 0, UNTAGGED: 0, total: 0 }
+			)
+		);
+	}
+
+	// Awards per month for the last 12 months, zero-filled so the line is honest
+	// about quiet months.
+	const monthCounts = new Map(
+		((facet.awardsByMonth ?? []) as { _id: string; count: number }[]).map((m) => [
+			m._id,
+			m.count
+		])
+	);
+	const awardsByMonth: { month: string; label: string; count: number }[] = [];
+	const now = new Date();
+	for (let i = 11; i >= 0; i--) {
+		const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+		const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+		awardsByMonth.push({
+			month: key,
+			label: d.toLocaleDateString('en-US', { month: 'short' }),
+			count: monthCounts.get(key) ?? 0
+		});
+	}
+
+	const analytics = {
+		totalHouseholds: firstCount(facet.total),
+		voters: firstCount(facet.voters),
+		located: firstCount(facet.located),
+		reached: firstCount(facet.reached),
+		awardsTotal: firstCount(facet.awardsTotal),
+		activeGrants,
+		totalGrants,
+		topBarangays,
+		awardsByMonth
+	};
 
 	const householdCoordinates = householdsWithCoords
 		.map(
@@ -88,6 +208,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 		barangays: barangays as unknown as Barangay[],
 		households: householdCoordinates,
 		tagCounts,
-		activeGrants: 0
+		activeGrants,
+		analytics
 	};
 };

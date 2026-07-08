@@ -5,13 +5,34 @@
 	import { showToast } from '$lib/utils/toastHelper';
 	import { getToastStore } from '@skeletonlabs/skeleton';
 	import { escapeHtml } from '$lib/utils/stringHelper';
-	import { getTagColor } from '$lib/utils/tagHelper';
+	import { getTagColor, getTagConfig } from '$lib/utils/tagHelper';
 	import { ROLES } from '$lib/utils/roles';
+	import StatCard from '$lib/components/charts/StatCard.svelte';
+	import HStackChart from '$lib/components/charts/HStackChart.svelte';
+	import TrendChart from '$lib/components/charts/TrendChart.svelte';
 
 	type HouseholdCoordinate = {
 		lat: number;
 		lng: number;
 		tag: string;
+	};
+
+	type Analytics = {
+		totalHouseholds: number;
+		voters: number;
+		located: number;
+		reached: number;
+		awardsTotal: number;
+		activeGrants: number;
+		totalGrants: number;
+		topBarangays: {
+			name: string;
+			APIN: number;
+			KONTRA: number;
+			UNTAGGED: number;
+			total: number;
+		}[];
+		awardsByMonth: { month: string; label: string; count: number }[];
 	};
 
 	type PageData = {
@@ -20,15 +41,28 @@
 		households: HouseholdCoordinate[];
 		tagCounts: { APIN: number; KONTRA: number; UNTAGGED: number };
 		activeGrants: number;
+		analytics: Analytics | null;
 	};
 
 	export let data: PageData;
-	const { user, barangays, households, tagCounts, activeGrants } = data;
+	const { user, barangays, households, tagCounts, activeGrants, analytics } = data;
 
 	const isAdminView = user.role === ROLES.ADMINISTRATOR;
 	const isEncoderView = user.role === ROLES.ENCODER;
 	const isGrantOfficerView = user.role === ROLES.GRANT_OFFICER;
 	const totalHouseholds = tagCounts.APIN + tagCounts.KONTRA + tagCounts.UNTAGGED;
+
+	// Chart series: fixed order, colors follow the entity (validated variants).
+	const tagSeries = (['APIN', 'KONTRA', 'UNTAGGED'] as const).map((t) => ({
+		key: t,
+		label: getTagConfig(t).label,
+		color: getTagConfig(t).chartColor
+	}));
+
+	const pct = (part: number, whole: number): number => (whole > 0 ? (part / whole) * 100 : 0);
+	const pctLabel = (part: number, whole: number): string => `${Math.round(pct(part, whole))}%`;
+
+	const taggedCount = tagCounts.APIN + tagCounts.KONTRA;
 
 	let mapElement: HTMLElement;
 	let map: google.maps.Map;
@@ -125,26 +159,82 @@
 </script>
 
 <div class="container mx-auto p-4">
-	{#if isAdminView}
-		<div class="card p-4">
-			<div class="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:max-w-xl">
-				<div class="card p-4 variant-filled-success">
-					<h1 class="card-title text-white">APIN</h1>
-					<p class="card-text text-white">{tagCounts.APIN}</p>
-				</div>
-				<div class="card p-4 variant-filled-error">
-					<h1 class="card-title text-white">KONTRA</h1>
-					<p class="card-text text-white">{tagCounts.KONTRA}</p>
-				</div>
-				<div class="card p-4 variant-filled-surface">
-					<h1 class="card-title text-white">UNTAGGED</h1>
-					<p class="card-text text-white">{tagCounts.UNTAGGED}</p>
-				</div>
+	{#if isAdminView && analytics}
+		<div class="space-y-4">
+			<!-- KPI tiles -->
+			<div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+				<StatCard label="Households" value={analytics.totalHouseholds.toLocaleString()} />
+				<StatCard
+					label="Tagging progress"
+					value={pctLabel(taggedCount, analytics.totalHouseholds)}
+					sub="{taggedCount.toLocaleString()} tagged, {tagCounts.UNTAGGED.toLocaleString()} to go"
+					meterPct={pct(taggedCount, analytics.totalHouseholds)}
+					accent={getTagConfig('APIN').chartColor}
+				/>
+				<StatCard
+					label="Registered voters"
+					value={analytics.voters.toLocaleString()}
+					sub="{pctLabel(analytics.voters, analytics.totalHouseholds)} of households"
+				/>
+				<StatCard
+					label="Mapped locations"
+					value={pctLabel(analytics.located, analytics.totalHouseholds)}
+					sub="{analytics.located.toLocaleString()} pinned on the map"
+					meterPct={pct(analytics.located, analytics.totalHouseholds)}
+					accent="#3B82F6"
+				/>
+				<StatCard
+					label="Grants"
+					value={analytics.activeGrants}
+					sub="active of {analytics.totalGrants} total"
+				/>
+				<StatCard
+					label="Grant reach"
+					value={pctLabel(analytics.reached, analytics.totalHouseholds)}
+					sub="{analytics.reached.toLocaleString()} households · {analytics.awardsTotal.toLocaleString()} awards"
+					meterPct={pct(analytics.reached, analytics.totalHouseholds)}
+					accent="#3B82F6"
+				/>
 			</div>
-			<header class="card-header">
-				<h1 class="h3">Barangay Map Overview</h1>
-			</header>
-			<section class="p-4">
+
+			<!-- Charts -->
+			<div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+				<HStackChart
+					title="Tag distribution"
+					series={tagSeries}
+					rows={[
+						{
+							label: 'All households',
+							values: {
+								APIN: tagCounts.APIN,
+								KONTRA: tagCounts.KONTRA,
+								UNTAGGED: tagCounts.UNTAGGED
+							}
+						}
+					]}
+				/>
+				<TrendChart
+					title="Grant awards per month"
+					points={analytics.awardsByMonth}
+					color="#3B82F6"
+					unit="awards"
+				/>
+			</div>
+
+			<HStackChart
+				title="Households by barangay (top 10)"
+				series={tagSeries}
+				rows={analytics.topBarangays.map((b) => ({
+					label: b.name,
+					values: { APIN: b.APIN, KONTRA: b.KONTRA, UNTAGGED: b.UNTAGGED }
+				}))}
+			/>
+
+			<!-- Map -->
+			<div class="card p-4">
+				<header class="card-header p-0 pb-3">
+					<h1 class="h4">Barangay Map Overview</h1>
+				</header>
 				<div class="border border-gray-300 rounded-lg overflow-hidden relative">
 					<div bind:this={mapElement} class="h-[600px] w-full"></div>
 					{#if isLoading}
@@ -153,7 +243,7 @@
 						</div>
 					{/if}
 				</div>
-			</section>
+			</div>
 		</div>
 	{:else}
 		<!-- Simple, task-focused landing for Encoders and Grant Officers -->
