@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { page } from '$app/stores';
-	import { goto } from '$app/navigation';
 	import { getToastStore } from '@skeletonlabs/skeleton';
 	import type { ToastSettings } from '@skeletonlabs/skeleton';
 	import CryptoJS from 'crypto-js';
@@ -32,7 +31,7 @@
 	}
 
 	const redirect = () => {
-		goto('/dashboard');
+		window.location.href = '/dashboard';
 	};
 
 	const handleLogin = async (): Promise<void> => {
@@ -56,8 +55,10 @@
 			toastSettings.background = 'bg-green-500';
 			toastStore.trigger(toastSettings);
 
-			// All dashboard roles land on the role-aware dashboard home.
-			goto('/dashboard');
+			// Full page load (not client-side goto) so every load() re-runs against
+			// the new session — otherwise the previous user's cached page data
+			// (role, cluster-scoped tables) lingers until a manual refresh.
+			window.location.href = '/dashboard';
 		} catch (error) {
 			toastSettings.message = error.message || 'Invalid username or password';
 			toastSettings.background = 'bg-red-500';

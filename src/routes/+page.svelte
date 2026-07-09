@@ -3,7 +3,6 @@
 <script lang="ts">
 	import { Drawer, getDrawerStore, getToastStore } from '@skeletonlabs/skeleton';
 	import type { DrawerSettings, ToastSettings } from '@skeletonlabs/skeleton';
-	import { goto } from '$app/navigation';
 	import CryptoJS from 'crypto-js';
 
 	export let data;
@@ -26,8 +25,8 @@
 	}
 
 	const redirect = () => {
-		// All dashboard roles land on the role-aware dashboard home.
-		goto('/dashboard');
+		// Full page load so load() runs against the current session.
+		window.location.href = '/dashboard';
 	};
 
 	const handleLogin = async (): Promise<void> => {
@@ -51,8 +50,8 @@
 			toastSettings.background = 'bg-green-500';
 			toastStore.trigger(toastSettings);
 
-			// All dashboard roles land on the role-aware dashboard home.
-			goto('/dashboard');
+			// Full page load (not goto) so the new session's role/data is fresh.
+			window.location.href = '/dashboard';
 		} catch (error) {
 			toastSettings.message = error.message || 'Invalid username or password';
 			toastSettings.background = 'bg-red-500';

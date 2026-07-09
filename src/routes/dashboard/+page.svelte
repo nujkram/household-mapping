@@ -19,6 +19,7 @@
 
 	type Analytics = {
 		totalHouseholds: number;
+		subFamilies: number;
 		voters: number;
 		located: number;
 		reached: number;
@@ -32,6 +33,7 @@
 			UNTAGGED: number;
 			total: number;
 		}[];
+		byCluster: { name: string; APIN: number; KONTRA: number; UNTAGGED: number }[];
 		awardsByMonth: { month: string; label: string; count: number }[];
 	};
 
@@ -163,7 +165,13 @@
 		<div class="space-y-4">
 			<!-- KPI tiles -->
 			<div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
-				<StatCard label="Households" value={analytics.totalHouseholds.toLocaleString()} />
+				<StatCard
+					label="Families"
+					value={analytics.totalHouseholds.toLocaleString()}
+					sub={analytics.subFamilies > 0
+						? `in ${(analytics.totalHouseholds - analytics.subFamilies).toLocaleString()} household dwellings`
+						: ''}
+				/>
 				<StatCard
 					label="Tagging progress"
 					value={pctLabel(taggedCount, analytics.totalHouseholds)}
@@ -221,14 +229,24 @@
 				/>
 			</div>
 
-			<HStackChart
-				title="Households by barangay (top 10)"
-				series={tagSeries}
-				rows={analytics.topBarangays.map((b) => ({
-					label: b.name,
-					values: { APIN: b.APIN, KONTRA: b.KONTRA, UNTAGGED: b.UNTAGGED }
-				}))}
-			/>
+			<div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+				<HStackChart
+					title="Households by cluster"
+					series={tagSeries}
+					rows={analytics.byCluster.map((c) => ({
+						label: c.name,
+						values: { APIN: c.APIN, KONTRA: c.KONTRA, UNTAGGED: c.UNTAGGED }
+					}))}
+				/>
+				<HStackChart
+					title="Households by barangay (top 10)"
+					series={tagSeries}
+					rows={analytics.topBarangays.map((b) => ({
+						label: b.name,
+						values: { APIN: b.APIN, KONTRA: b.KONTRA, UNTAGGED: b.UNTAGGED }
+					}))}
+				/>
+			</div>
 
 			<!-- Map -->
 			<div class="card p-4">
@@ -306,7 +324,7 @@
 					{:else}
 						<li>Press <strong>Award Grants</strong> above.</li>
 						<li>Find a family using the search box.</li>
-						<li>Press <strong>+ Grant</strong> and choose the grant to give.</li>
+						<li>Press <strong>+ Grant</strong> to give a grant, or <strong>+ Service</strong> to record a patient service.</li>
 						<li>To add a new grant program, go to <strong>Grants</strong>.</li>
 					{/if}
 				</ol>

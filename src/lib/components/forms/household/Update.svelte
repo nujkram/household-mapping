@@ -7,6 +7,8 @@
 	import { loadGoogleMaps } from '$lib/utils/googleMaps';
 	import { id } from '$lib/common/utils';
 	import DependentFields from './DependentFields.svelte';
+	import SurveyFields from './SurveyFields.svelte';
+	import { surveyFrom, emptySurvey } from '$lib/utils/householdOptions';
 
 	export let drawerStore: DrawerStore;
 	export let data: Household;
@@ -18,8 +20,14 @@
 	let isSubmitting = false;
 	let isLoading = true;
 	let isInitializing = true;
+	// Optional census-style survey fields, prefilled from the record.
+	const survey = surveyFrom(data as unknown as Record<string, unknown>);
 	let barangays: Barangay[] = [];
-	let dependentFields: Dependents[] = data.dependentDetails || [];
+	// Seed survey defaults so every dependent has all optional keys bound.
+	let dependentFields: Dependents[] = (data.dependentDetails || []).map((d) => ({
+		...emptySurvey(),
+		...d
+	}));
 	let map: google.maps.Map;
 	let marker: google.maps.Marker;
 	let householdsForDependents: Household[] = [];
@@ -135,6 +143,7 @@
 				dependentFields = [
 					...dependentFields,
 					{
+						...emptySurvey(),
 						_id: id(),
 						householdId: data._id,
 						linkedHouseholdId: '',
@@ -220,7 +229,8 @@
 					dependentDetails: dependentFields,
 					latitude: data.latitude,
 					longitude: data.longitude,
-					tag: data.tag
+					tag: data.tag,
+					...survey
 				})
 			});
 
@@ -344,6 +354,8 @@
 		</label>
 
 		<DependentFields bind:dependentFields households={householdsForDependents} />
+
+		<SurveyFields {survey} />
 	</div>
 
 	<label class="hidden label">

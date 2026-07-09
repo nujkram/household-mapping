@@ -3,11 +3,14 @@
 	import type { ToastSettings } from '@skeletonlabs/skeleton';
 	import { goto } from '$app/navigation';
 	import { submitJson } from '$lib/utils/apiHelper';
+	import { CLUSTER_OPTIONS } from '$lib/utils/clusters';
 
 	export let drawerStore = () => {};
 	export let moduleName: string;
 	export let user: any;
 	export let id: string;
+	// Default so the bound <select> has a value even for legacy users.
+	if (user && user.cluster == null) user.cluster = '';
 	let isFocused: boolean = true;
 	let isSubmitting = false;
 
@@ -33,7 +36,8 @@
 				lastName: user?.lastName,
 				firstName: user?.firstName,
 				phone: user?.phone,
-				role: user?.role
+				role: user?.role,
+				cluster: user?.cluster || ''
 			});
 
 			toastSettings.message = result.message;
@@ -59,6 +63,18 @@
 			<option value="GRANT_OFFICER">Grant Officer — awards grants</option>
 		</select>
 	</label>
+	{#if user.role === 'ENCODER'}
+		<label class="label mt-4">
+			<span>Assigned Cluster</span>
+			<select class="select" bind:value={user.cluster}>
+				<option value="">All clusters (no restriction)</option>
+				{#each CLUSTER_OPTIONS as c}
+					<option value={c.value}>{c.label}</option>
+				{/each}
+			</select>
+			<span class="text-xs opacity-60">Encoder will only see households in this cluster.</span>
+		</label>
+	{/if}
 	<hr class="mt-4" />
 	<label class="label mt-4">
 		<span>Last Name</span>

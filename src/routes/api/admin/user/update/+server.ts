@@ -25,6 +25,8 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				isActive: true,
 				// Validated against the role whitelist by userUpdateSchema.
 				role: data.role,
+				// Cluster scoping only applies to encoders.
+				cluster: data.role === 'ENCODER' ? data.cluster : '',
 				updatedBy: locals.user._id
 			}
 		}

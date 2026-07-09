@@ -28,6 +28,69 @@ export const barangayUpdateSchema = barangayInsertSchema.extend({
 
 // --- Household --------------------------------------------------------------
 
+/** Reusable optional select: a known code or '' (not answered). */
+const optionalEnum = <T extends readonly [string, ...string[]]>(values: T) =>
+	z
+		.enum(values as unknown as [string, ...string[]])
+		.or(z.literal(''))
+		.optional()
+		.default('');
+
+const optionalText = z.string().trim().optional().default('');
+const optionalUpperText = z.string().trim().toUpperCase().optional().default('');
+
+// Optional census-style survey fields on a household. Every field defaults to
+// "not answered" so partial submissions are always valid.
+export const householdSurveySchema = z.object({
+	dateOfVisit: optionalText,
+	sitio: optionalUpperText,
+	ethnicity: optionalUpperText,
+	socioeconomicStatus: optionalEnum(['4PS', 'NON_4PS'] as const),
+	relationshipToHead: optionalEnum(['1', '2', '3', '4'] as const),
+	relationshipOther: optionalUpperText,
+	civilStatus: optionalEnum(['SINGLE', 'MARRIED', 'WIDOWED', 'SEPARATED', 'LIVE_IN'] as const),
+	educationalAttainment: optionalEnum([
+		'N',
+		'K',
+		'ES',
+		'EU',
+		'EG',
+		'HS',
+		'HU',
+		'HG',
+		'V',
+		'CS',
+		'CU',
+		'CG'
+	] as const),
+	philhealth: optionalEnum(['YES', 'NO'] as const),
+	philhealthMembershipType: optionalEnum(['ME', 'D'] as const),
+	categories: z.array(z.enum(['SC', 'PWD', 'Y', 'SP', 'PW'])).optional().default([]),
+	occupationEmployment: z.boolean().optional().default(false),
+	occupationFarming: z.boolean().optional().default(false),
+	occupationFishing: z.boolean().optional().default(false),
+	occupationVending: z.boolean().optional().default(false),
+	occupationToda: z.boolean().optional().default(false),
+	occupationOther: optionalUpperText,
+	averageIncome: z.preprocess(
+		(v) => (v === '' || v === null || v === undefined ? null : Number(v)),
+		z.number().nonnegative('must be 0 or more').nullable()
+	),
+	housingType: optionalEnum(['O', 'R'] as const),
+	housingMaterials: optionalEnum(['CONCRETE', 'SEMI_CONCRETE', 'WOOD', 'LIGHT_MATERIALS'] as const),
+	landOwnership: optionalEnum(['O', 'N', 'T'] as const),
+	religion: optionalUpperText,
+	lengthOfStay: optionalText,
+	interviewedBy: optionalUpperText
+});
+
+export const SURVEY_KEYS = Object.keys(householdSurveySchema.shape);
+
+/** Pull just the survey fields out of a parsed household payload. */
+export const pickSurveyFields = (data: Record<string, unknown>): Record<string, unknown> =>
+	Object.fromEntries(SURVEY_KEYS.map((k) => [k, data[k]]));
+
+// Dependents carry the same optional survey fields as the head of household.
 const dependentSchema = z
 	.object({
 		_id: z.string(),
@@ -41,23 +104,26 @@ const dependentSchema = z
 		gender: z.string().optional().default('MALE'),
 		isVoter: z.boolean().optional().default(false)
 	})
+	.extend(householdSurveySchema.shape)
 	// dependents may also carry latitude/longitude copied from a linked household
 	.loose();
 
-const householdBaseSchema = z.object({
-	barangayId: z.string().min(1),
-	firstName: nameField,
-	middleName: optionalNameField,
-	lastName: nameField,
-	gender: z.string().trim().optional().default('MALE'),
-	dateOfBirth: z.string().nullable().optional(),
-	phone,
-	isVoter: z.coerce.boolean().optional().default(false),
-	dependents: z.coerce.number().int().min(0).optional().default(0),
-	dependentDetails: z.array(dependentSchema).optional().default([]),
-	latitude: coordinate,
-	longitude: coordinate
-});
+const householdBaseSchema = z
+	.object({
+		barangayId: z.string().min(1),
+		firstName: nameField,
+		middleName: optionalNameField,
+		lastName: nameField,
+		gender: z.string().trim().optional().default('MALE'),
+		dateOfBirth: z.string().nullable().optional(),
+		phone,
+		isVoter: z.coerce.boolean().optional().default(false),
+		dependents: z.coerce.number().int().min(0).optional().default(0),
+		dependentDetails: z.array(dependentSchema).optional().default([]),
+		latitude: coordinate,
+		longitude: coordinate
+	})
+	.extend(householdSurveySchema.shape);
 
 export const householdInsertSchema = householdBaseSchema;
 
@@ -96,12 +162,36 @@ export const householdGrantSchema = z.object({
 	grantId: z.string().min(1)
 });
 
+// --- Service (patient-service registry) -------------------------------------
+
+export const serviceInsertSchema = z.object({
+	// Services are recorded from a household; keep the link for its history view.
+	householdId: z.string().optional().default(''),
+	patientName: nameField,
+	categories: z
+		.array(z.enum(['REGULAR', 'PWD', 'SENIOR', '4PS', 'ANIMAL_BITE']))
+		.optional()
+		.default([]),
+	amount: z.coerce.number().nonnegative('must be 0 or more'),
+	dateReceived: z
+		.string()
+		.trim()
+		.min(1, 'is required')
+		.refine((v) => !Number.isNaN(new Date(v).getTime()), 'must be a valid date')
+});
+
+export const serviceUpdateSchema = serviceInsertSchema.extend({
+	_id: z.string().min(1)
+});
+
 // --- User -------------------------------------------------------------------
 // `role` is restricted to the known whitelist. Only admins can reach the user
 // endpoints (enforced by the central hook guard), and the enum prevents any
 // arbitrary role string from being stored.
 
 const roleField = z.enum(['ADMINISTRATOR', 'ENCODER', 'GRANT_OFFICER']);
+// Optional cluster assignment (meaningful for encoders); '' = all clusters.
+const clusterField = z.enum(['CLUSTER_1', 'CLUSTER_2', 'CLUSTER_3']).or(z.literal('')).optional().default('');
 
 export const userInsertSchema = z.object({
 	username: z.string().trim().min(1),
@@ -116,7 +206,8 @@ export const userInsertSchema = z.object({
 		.min(3)
 		.refine((v) => v.includes('@'), 'must be a valid email'),
 	phone,
-	role: roleField
+	role: roleField,
+	cluster: clusterField
 });
 
 export const userUpdateSchema = z.object({
@@ -124,7 +215,8 @@ export const userUpdateSchema = z.object({
 	firstName: nameField,
 	lastName: nameField,
 	phone,
-	role: roleField
+	role: roleField,
+	cluster: clusterField
 });
 
 export const resetPasswordSchema = z.object({

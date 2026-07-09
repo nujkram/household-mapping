@@ -8,6 +8,8 @@
 	import { loadGoogleMaps } from '$lib/utils/googleMaps';
 	import { id } from '$lib/common/utils';
 	import DependentFields from './DependentFields.svelte';
+	import SurveyFields from './SurveyFields.svelte';
+	import { emptySurvey } from '$lib/utils/householdOptions';
 
 	export let drawerStore: DrawerStore;
 	export let data: Barangay;
@@ -30,6 +32,8 @@
 	let barangays: Barangay[] = [];
 	let dependentFields: Dependents[] = [];
 	let householdsForDependents: Household[] = [];
+	// Optional census-style survey fields.
+	const survey = emptySurvey();
 
 	let map: google.maps.Map;
 	let marker: google.maps.marker.AdvancedMarkerElement;
@@ -138,6 +142,7 @@
 				dependentFields = [
 					...dependentFields,
 					{
+						...emptySurvey(),
 						_id: id(),
 						householdId: '', // Will be set after household creation
 						firstName: '',
@@ -180,7 +185,8 @@
 				dependents,
 				dependentDetails: dependentFields,
 				latitude,
-				longitude
+				longitude,
+				...survey
 			});
 			await barangayStore.refresh();
 			onSuccess?.();
@@ -286,6 +292,8 @@
 		</label>
 
 		<DependentFields bind:dependentFields households={householdsForDependents} />
+
+		<SurveyFields {survey} />
 	</div>
 
 	<label class="hidden label">

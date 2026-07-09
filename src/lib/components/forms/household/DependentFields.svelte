@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { Household, Dependents } from '$lib/utils/types';
+	import SurveyFields from './SurveyFields.svelte';
 
 	/** The dependent rows being edited (bind this from the parent form). */
 	export let dependentFields: Dependents[] = [];
@@ -200,6 +201,11 @@
 							disabled={isLinked}
 						/>
 					</label>
+				</div>
+
+				<!-- Same optional survey section as the head of household -->
+				<div class="mt-3">
+					<SurveyFields survey={dependent} title="Additional Details for this dependent" compact />
 				</div>
 			</div>
 		{/each}

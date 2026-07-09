@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { Barangay } from '$lib/utils/types';
+	import { clusterLabel, clusterIdForBarangay } from '$lib/utils/clusters';
 	export let data: Barangay[];
 	export let handleClickView: (item: Barangay) => void;
 	export let handleClickUpdate: (item: Barangay) => void;
@@ -10,6 +11,7 @@
 		<thead>
 			<tr>
 				<th>Name</th>
+				<th>Cluster</th>
 				<th>Captain</th>
 				<th>Phone</th>
 				<th class="text-center">Actions</th>
@@ -18,12 +20,19 @@
 		<tbody>
 			{#if data.length === 0}
 				<tr>
-					<td colspan="4" class="text-center py-8 opacity-60">No barangays yet.</td>
+					<td colspan="5" class="text-center py-8 opacity-60">No barangays yet.</td>
 				</tr>
 			{/if}
 			{#each data as item, i}
 				<tr>
 					<td>{item.name}</td>
+					<td>
+						{#if clusterIdForBarangay(item.name)}
+							<span class="badge variant-soft">{clusterLabel(clusterIdForBarangay(item.name))}</span>
+						{:else}
+							<span class="opacity-40">—</span>
+						{/if}
+					</td>
 					<td>{item.fullName}</td>
 					<td>{item.phone}</td>
 					<td>

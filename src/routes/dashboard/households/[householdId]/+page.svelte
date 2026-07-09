@@ -7,12 +7,28 @@
 	import { loadGoogleMaps } from '$lib/utils/googleMaps';
 	import { calculateAge } from '$lib/common/utils';
 	import { getTagConfig } from '$lib/utils/tagHelper';
+	import {
+		SOCIOECONOMIC_OPTIONS,
+		RELATIONSHIP_OPTIONS,
+		CIVIL_STATUS_OPTIONS,
+		EDUCATIONAL_OPTIONS,
+		YES_NO_OPTIONS,
+		MEMBERSHIP_TYPE_OPTIONS,
+		CATEGORY_OPTIONS,
+		HOUSING_TYPE_OPTIONS,
+		HOUSING_MATERIALS_OPTIONS,
+		LAND_OWNERSHIP_OPTIONS,
+		labelFor
+	} from '$lib/utils/householdOptions';
 	import { submitJson } from '$lib/utils/apiHelper';
 	import { canEditHouseholds, canManageGrants } from '$lib/utils/roles';
 	import { page } from '$app/stores';
 	import Update from '$lib/components/forms/household/Update.svelte';
 	import AddGrant from '$lib/components/forms/household/AddGrant.svelte';
-	import type { HouseholdGrant } from '$lib/utils/types';
+	import ServiceCreate from '$lib/components/forms/service/Create.svelte';
+	import ServiceUpdate from '$lib/components/forms/service/Update.svelte';
+	import { serviceCategoryLabels } from '$lib/utils/serviceOptions';
+	import type { HouseholdGrant, Service } from '$lib/utils/types';
 
 	export let data;
 
@@ -42,6 +58,58 @@
 		position: 'right'
 	};
 
+	const drawerAddService: DrawerSettings = {
+		id: 'addService',
+		width: 'w-[280px] md:w-[520px]',
+		padding: 'p-4',
+		rounded: 'rounded-xl',
+		position: 'right'
+	};
+
+	const drawerEditService: DrawerSettings = {
+		id: 'editService',
+		width: 'w-[280px] md:w-[520px]',
+		padding: 'p-4',
+		rounded: 'rounded-xl',
+		position: 'right'
+	};
+
+	$: services = (data.services as unknown as Service[]) || [];
+	let selectedService: Service | undefined;
+
+	// Multi-family dwelling composition (derived from dependent links).
+	$: subFamilies = (data.subFamilies as any[]) || [];
+	$: parentHousehold = data.parentHousehold as any;
+
+	const peso = (n: number | undefined) => `₱${Number(n || 0).toLocaleString()}`;
+
+	const handleEditService = (service: Service) => {
+		selectedService = service;
+		drawerStore.open(drawerEditService);
+	};
+
+	const handleDeleteService = (service: Service) => {
+		showActionConfirmationToast(
+			toastStore,
+			`Delete the service for "${service.patientName}" (${peso(service.amount)})?`,
+			'Delete',
+			async () => {
+				try {
+					const result = await submitJson('/api/admin/service/delete', { _id: service._id });
+					showToast(toastStore, result.message, true);
+					await invalidateAll();
+				} catch (error) {
+					showToast(
+						toastStore,
+						error instanceof Error ? error.message : 'Failed to delete service',
+						false
+					);
+					console.error(error);
+				}
+			}
+		);
+	};
+
 	const drawerStore = getDrawerStore();
 	const toastStore = getToastStore();
 	// Close any drawer left open by a previous page (drawer store is global).
@@ -58,6 +126,82 @@
 		if (!value) return '—';
 		const date = new Date(value);
 		return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleDateString();
+	};
+
+	const dash = (value: string | null | undefined): string => value || '—';
+
+	// Occupation flags → readable list, e.g. "Farming, Fishing".
+	$: occupations = [
+		household.occupationEmployment && 'Employment',
+		household.occupationFarming && 'Farming',
+		household.occupationFishing && 'Fishing',
+		household.occupationVending && 'Vending',
+		household.occupationToda && 'TODA',
+		household.occupationOther
+	]
+		.filter(Boolean)
+		.join(', ');
+
+	$: categoryLabels = (household.categories || [])
+		.map((c: string) => labelFor(CATEGORY_OPTIONS, c))
+		.join(', ');
+
+	$: relationshipLabel =
+		household.relationshipToHead === '4'
+			? household.relationshipOther || 'Others'
+			: labelFor(RELATIONSHIP_OPTIONS, household.relationshipToHead);
+
+	// Survey rows for a dependent — only the answered ones.
+	const dependentExtras = (dep: any): [string, string][] => {
+		const occ = [
+			dep.occupationEmployment && 'Employment',
+			dep.occupationFarming && 'Farming',
+			dep.occupationFishing && 'Fishing',
+			dep.occupationVending && 'Vending',
+			dep.occupationToda && 'TODA',
+			dep.occupationOther
+		]
+			.filter(Boolean)
+			.join(', ');
+		const rows: [string, string][] = [
+			['Date of Visit', dep.dateOfVisit ? formatDate(dep.dateOfVisit) : ''],
+			['Sitio', dep.sitio || ''],
+			['Ethnicity', dep.ethnicity || ''],
+			['Socioeconomic Status', labelFor(SOCIOECONOMIC_OPTIONS, dep.socioeconomicStatus)],
+			[
+				'Relationship to HH Head',
+				dep.relationshipToHead === '4'
+					? dep.relationshipOther || 'Others'
+					: labelFor(RELATIONSHIP_OPTIONS, dep.relationshipToHead)
+			],
+			['Civil Status', labelFor(CIVIL_STATUS_OPTIONS, dep.civilStatus)],
+			['Education', labelFor(EDUCATIONAL_OPTIONS, dep.educationalAttainment)],
+			[
+				'PhilHealth',
+				dep.philhealth
+					? labelFor(YES_NO_OPTIONS, dep.philhealth) +
+						(dep.philhealth === 'YES' && dep.philhealthMembershipType
+							? ` (${labelFor(MEMBERSHIP_TYPE_OPTIONS, dep.philhealthMembershipType)})`
+							: '')
+					: ''
+			],
+			[
+				'Category',
+				(dep.categories || []).map((c: string) => labelFor(CATEGORY_OPTIONS, c)).join(', ')
+			],
+			['Occupation', occ],
+			[
+				'Average Income',
+				dep.averageIncome != null ? `₱${Number(dep.averageIncome).toLocaleString()}` : ''
+			],
+			['Type of Housing', labelFor(HOUSING_TYPE_OPTIONS, dep.housingType)],
+			['Housing Materials', labelFor(HOUSING_MATERIALS_OPTIONS, dep.housingMaterials)],
+			['Land Ownership', labelFor(LAND_OWNERSHIP_OPTIONS, dep.landOwnership)],
+			['Religion', dep.religion || ''],
+			['Length of Stay', dep.lengthOfStay || ''],
+			['Interviewed By', dep.interviewedBy || '']
+		];
+		return rows.filter(([, v]) => v);
 	};
 
 	// Remove a grant from this household, behind a confirmation toast.
@@ -157,6 +301,20 @@
 		</header>
 
 		<section class="p-4 space-y-6">
+			{#if parentHousehold}
+				<!-- This record is one family within another household's dwelling -->
+				<div class="card variant-soft p-3 flex flex-wrap items-center gap-2">
+					<span aria-hidden="true">🏠</span>
+					<span>
+						This family lives in
+						<strong>{parentHousehold.fullName}</strong>’s household.
+					</span>
+					<a class="anchor" href="/dashboard/households/{parentHousehold._id}">
+						View main household
+					</a>
+				</div>
+			{/if}
+
 			<!-- Map -->
 			{#if hasLocation}
 				<div class="border border-gray-300 rounded-lg overflow-hidden">
@@ -268,6 +426,142 @@
 				</div>
 			</div>
 
+			<!-- Survey details -->
+			<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+				<div class="card p-4">
+					<h2 class="h3 mb-4">Background & Membership</h2>
+					<dl class="space-y-2">
+						<div>
+							<dt class="font-bold inline">Date of Visit:</dt>
+							<dd class="inline">{formatDate(household.dateOfVisit)}</dd>
+						</div>
+						<div>
+							<dt class="font-bold inline">Sitio:</dt>
+							<dd class="inline">{dash(household.sitio)}</dd>
+						</div>
+						<div>
+							<dt class="font-bold inline">Ethnicity:</dt>
+							<dd class="inline">{dash(household.ethnicity)}</dd>
+						</div>
+						<div>
+							<dt class="font-bold inline">Socioeconomic Status:</dt>
+							<dd class="inline">
+								{dash(labelFor(SOCIOECONOMIC_OPTIONS, household.socioeconomicStatus))}
+							</dd>
+						</div>
+						<div>
+							<dt class="font-bold inline">Relationship to HH Head:</dt>
+							<dd class="inline">{dash(relationshipLabel)}</dd>
+						</div>
+						<div>
+							<dt class="font-bold inline">Civil Status:</dt>
+							<dd class="inline">{dash(labelFor(CIVIL_STATUS_OPTIONS, household.civilStatus))}</dd>
+						</div>
+						<div>
+							<dt class="font-bold inline">Educational Attainment:</dt>
+							<dd class="inline">
+								{dash(labelFor(EDUCATIONAL_OPTIONS, household.educationalAttainment))}
+							</dd>
+						</div>
+						<div>
+							<dt class="font-bold inline">PhilHealth:</dt>
+							<dd class="inline">
+								{dash(labelFor(YES_NO_OPTIONS, household.philhealth))}{household.philhealth ===
+									'YES' && household.philhealthMembershipType
+									? ` (${labelFor(MEMBERSHIP_TYPE_OPTIONS, household.philhealthMembershipType)})`
+									: ''}
+							</dd>
+						</div>
+						<div>
+							<dt class="font-bold inline">Category:</dt>
+							<dd class="inline">{dash(categoryLabels)}</dd>
+						</div>
+						<div>
+							<dt class="font-bold inline">Religion:</dt>
+							<dd class="inline">{dash(household.religion)}</dd>
+						</div>
+						<div>
+							<dt class="font-bold inline">Length of Stay:</dt>
+							<dd class="inline">{dash(household.lengthOfStay)}</dd>
+						</div>
+						<div>
+							<dt class="font-bold inline">Interviewed By:</dt>
+							<dd class="inline">{dash(household.interviewedBy)}</dd>
+						</div>
+					</dl>
+				</div>
+
+				<div class="card p-4">
+					<h2 class="h3 mb-4">Occupation & Housing</h2>
+					<dl class="space-y-2">
+						<div>
+							<dt class="font-bold inline">Occupation / Income Source:</dt>
+							<dd class="inline">{dash(occupations)}</dd>
+						</div>
+						<div>
+							<dt class="font-bold inline">Average Income:</dt>
+							<dd class="inline">
+								{household.averageIncome != null
+									? `₱${Number(household.averageIncome).toLocaleString()}`
+									: '—'}
+							</dd>
+						</div>
+						<div>
+							<dt class="font-bold inline">Type of Housing:</dt>
+							<dd class="inline">{dash(labelFor(HOUSING_TYPE_OPTIONS, household.housingType))}</dd>
+						</div>
+						<div>
+							<dt class="font-bold inline">Housing Materials:</dt>
+							<dd class="inline">
+								{dash(labelFor(HOUSING_MATERIALS_OPTIONS, household.housingMaterials))}
+							</dd>
+						</div>
+						<div>
+							<dt class="font-bold inline">Land Ownership:</dt>
+							<dd class="inline">
+								{dash(labelFor(LAND_OWNERSHIP_OPTIONS, household.landOwnership))}
+							</dd>
+						</div>
+					</dl>
+				</div>
+			</div>
+
+			{#if subFamilies.length > 0}
+				<!-- Multi-family dwelling: other families living in this household -->
+				<div>
+					<h2 class="h3 mb-2">Families in this Household ({subFamilies.length + 1})</h2>
+					<p class="text-sm opacity-60 mb-4">
+						These families live in the same dwelling but keep their own records, tags, and
+						grants. Link a dependent to their own household record to add one.
+					</p>
+					<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+						{#each subFamilies as family (family._id)}
+							<div class="card p-4 flex flex-col gap-2">
+								<div class="flex items-center gap-2">
+									<span
+										class="inline-block w-3 h-3 rounded-full shrink-0 {getTagConfig(family.tag)
+											.swatchClass}"
+										title={getTagConfig(family.tag).label}
+									></span>
+									<h3 class="h5 font-semibold">{family.fullName}</h3>
+								</div>
+								<p class="text-sm opacity-60">
+									{family.dependentDetails?.length ?? family.dependents ?? 0} dependent{(family
+										.dependentDetails?.length ??
+										family.dependents ??
+										0) === 1
+										? ''
+										: 's'}
+								</p>
+								<a class="anchor text-sm" href="/dashboard/households/{family._id}">
+									View family record
+								</a>
+							</div>
+						{/each}
+					</div>
+				</div>
+			{/if}
+
 			<!-- Grants -->
 			<div>
 				<div class="flex flex-wrap items-center justify-between gap-2 mb-4">
@@ -320,6 +614,76 @@
 				{/if}
 			</div>
 
+			<!-- Services -->
+			<div>
+				<div class="flex flex-wrap items-center justify-between gap-2 mb-4">
+					<h2 class="h3">Services ({services.length})</h2>
+					{#if canGrant}
+						<button
+							class="btn btn-sm variant-filled-primary"
+							on:click={() => drawerStore.open(drawerAddService)}
+						>
+							Record Service
+						</button>
+					{/if}
+				</div>
+				{#if services.length > 0}
+					<div class="table-container">
+						<table class="table table-hover">
+							<thead>
+								<tr>
+									<th>Patient</th>
+									<th>Category</th>
+									<th>Amount</th>
+									<th>Date Received</th>
+									{#if canGrant}<th class="text-center">Actions</th>{/if}
+								</tr>
+							</thead>
+							<tbody>
+								{#each services as service (service._id)}
+									<tr>
+										<td>{service.patientName}</td>
+										<td>
+											{#if service.categories?.length}
+												<div class="flex flex-wrap gap-1">
+													{#each service.categories as c (c)}
+														<span class="badge variant-soft">{serviceCategoryLabels([c])}</span>
+													{/each}
+												</div>
+											{:else}
+												<span class="opacity-40">—</span>
+											{/if}
+										</td>
+										<td>{peso(service.amount)}</td>
+										<td>{formatDate(service.dateReceived)}</td>
+										{#if canGrant}
+											<td class="text-center">
+												<div class="flex gap-2 justify-center">
+													<button
+														class="btn btn-sm variant-filled"
+														on:click={() => handleEditService(service)}
+													>
+														Edit
+													</button>
+													<button
+														class="btn btn-sm variant-filled-error"
+														on:click={() => handleDeleteService(service)}
+													>
+														Delete
+													</button>
+												</div>
+											</td>
+										{/if}
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
+				{:else}
+					<p class="opacity-60">No services recorded yet.</p>
+				{/if}
+			</div>
+
 			<!-- Dependents -->
 			<div>
 				<h2 class="h3 mb-4">
@@ -362,6 +726,22 @@
 										</div>
 									{/if}
 								</dl>
+
+								{#if dependentExtras(dependent).length > 0}
+									<details class="mt-3 text-sm">
+										<summary class="cursor-pointer select-none opacity-70">
+											Additional details ({dependentExtras(dependent).length})
+										</summary>
+										<dl class="space-y-1 mt-2">
+											{#each dependentExtras(dependent) as [label, value] (label)}
+												<div>
+													<dt class="font-bold inline">{label}:</dt>
+													<dd class="inline">{value}</dd>
+												</div>
+											{/each}
+										</dl>
+									</details>
+								{/if}
 							</div>
 						{/each}
 					</div>
@@ -389,5 +769,14 @@
 			{drawerStore}
 			onSuccess={() => invalidateAll()}
 		/>
+	{:else if $drawerStore.id === 'addService'}
+		<ServiceCreate
+			householdId={household._id}
+			patientName={household.fullName}
+			{drawerStore}
+			onSuccess={() => invalidateAll()}
+		/>
+	{:else if $drawerStore.id === 'editService' && selectedService}
+		<ServiceUpdate data={selectedService} {drawerStore} onSuccess={() => invalidateAll()} />
 	{/if}
 </Drawer>

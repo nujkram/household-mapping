@@ -37,7 +37,9 @@ const ensureIndexes = async (db: Db): Promise<void> => {
 			db.collection('households').createIndex({ isActive: 1 }),
 			db.collection('households').createIndex({ 'dependentDetails.linkedHouseholdId': 1 }),
 			db.collection('households').createIndex({ 'grants.grantId': 1 }),
+			db.collection('households').createIndex({ parentHouseholdId: 1 }),
 			db.collection('grants').createIndex({ name: 1, year: 1 }),
+			db.collection('services').createIndex({ dateReceived: -1 }),
 			db.collection('barangays').createIndex({ isActive: 1, name: 1 })
 		]);
 	} catch (error) {

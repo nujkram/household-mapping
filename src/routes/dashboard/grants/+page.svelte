@@ -120,9 +120,20 @@
 								</span>
 							</td>
 							<td class="text-center">
-								<button class="btn btn-sm variant-filled" on:click={() => handleClickUpdate(grant)}>
-									Update
-								</button>
+								<div class="flex gap-2 justify-center">
+									<a
+										class="btn btn-sm variant-filled-primary"
+										href="/dashboard/grants/{grant._id}"
+									>
+										Recipients
+									</a>
+									<button
+										class="btn btn-sm variant-filled"
+										on:click={() => handleClickUpdate(grant)}
+									>
+										Update
+									</button>
+								</div>
 							</td>
 						</tr>
 					{/each}

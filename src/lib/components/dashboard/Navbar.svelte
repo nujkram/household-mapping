@@ -1,13 +1,14 @@
 <script lang="ts">
 	import { page } from '$app/stores';
 	import { LightSwitch } from '@skeletonlabs/skeleton';
-	import { goto } from '$app/navigation';
 	import { ROLE_LABELS, type Role } from '$lib/utils/roles';
 
 	$: roleLabel = ROLE_LABELS[$page.data.user?.role as Role] ?? '';
 
 	const handleLogout = () => {
-		goto('/auth/logout/');
+		// Full document request → server clears the session and redirects to login,
+		// discarding all cached client-side page data from this session.
+		window.location.href = '/auth/logout/';
 	};
 </script>
 

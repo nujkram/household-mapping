@@ -2,6 +2,7 @@ import { redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 import type { Barangay, SessionUser } from '$lib/utils/types';
 import { ROLES } from '$lib/utils/roles';
+import { CLUSTERS, clusterIdForBarangay } from '$lib/utils/clusters';
 import clientPromise from '$lib/server/mongo';
 
 type HouseholdDocument = {
@@ -74,6 +75,11 @@ export const load: PageServerLoad = async ({ locals }) => {
 		{
 			$facet: {
 				total: [{ $count: 'count' }],
+				// Families living inside another household's dwelling.
+				subFamilies: [
+					{ $match: { parentHouseholdId: { $exists: true, $nin: [null, ''] } } },
+					{ $count: 'count' }
+				],
 				voters: [{ $match: { isVoter: true } }, { $count: 'count' }],
 				located: [
 					{ $match: { latitude: { $exists: true, $nin: [null, ''] } } },
@@ -181,8 +187,25 @@ export const load: PageServerLoad = async ({ locals }) => {
 		});
 	}
 
+	// Roll barangays up into their fixed clusters (+ an Unassigned bucket).
+	const clusterAgg = new Map<string, { APIN: number; KONTRA: number; UNTAGGED: number }>();
+	for (const c of CLUSTERS) clusterAgg.set(c.id, { APIN: 0, KONTRA: 0, UNTAGGED: 0 });
+	clusterAgg.set('UNASSIGNED', { APIN: 0, KONTRA: 0, UNTAGGED: 0 });
+	for (const row of barangayRows) {
+		const cid = clusterIdForBarangay(row.name) ?? 'UNASSIGNED';
+		const bucket = clusterAgg.get(cid)!;
+		bucket.APIN += row.APIN;
+		bucket.KONTRA += row.KONTRA;
+		bucket.UNTAGGED += row.UNTAGGED;
+	}
+	const byCluster = [
+		...CLUSTERS.map((c) => ({ name: c.label, ...clusterAgg.get(c.id)! })),
+		{ name: 'Unassigned', ...clusterAgg.get('UNASSIGNED')! }
+	].filter((r) => r.APIN + r.KONTRA + r.UNTAGGED > 0);
+
 	const analytics = {
 		totalHouseholds: firstCount(facet.total),
+		subFamilies: firstCount(facet.subFamilies),
 		voters: firstCount(facet.voters),
 		located: firstCount(facet.located),
 		reached: firstCount(facet.reached),
@@ -190,6 +213,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 		activeGrants,
 		totalGrants,
 		topBarangays,
+		byCluster,
 		awardsByMonth
 	};
 

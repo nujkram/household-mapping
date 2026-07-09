@@ -8,10 +8,12 @@
 	import Create from '$lib/components/forms/household/Create.svelte';
 	import Update from '$lib/components/forms/household/Update.svelte';
 	import AddGrant from '$lib/components/forms/household/AddGrant.svelte';
+	import ServiceCreate from '$lib/components/forms/service/Create.svelte';
 	import TableSkeleton from '$lib/components/common/TableSkeleton.svelte';
 	import { debounce } from '$lib/utils/debounce';
 	import { canEditHouseholds, canManageGrants } from '$lib/utils/roles';
 	import { getTagConfig } from '$lib/utils/tagHelper';
+	import { CLUSTER_OPTIONS, clusterLabel, clusterIdForBarangay } from '$lib/utils/clusters';
 
 	interface PageData {
 		households: Household[];
@@ -24,6 +26,8 @@
 		tag: string;
 		sort: string;
 		dir: string;
+		cluster: string;
+		lockedCluster: string;
 	}
 
 	export let data: PageData;
@@ -39,8 +43,29 @@
 	let searchInput = data.q;
 	let selectedBarangay = data.barangay;
 	let selectedTag = data.tag;
+	let selectedCluster = data.cluster;
 	let selectedSortField = data.sort;
 	let sortDirection = data.dir;
+
+	// A cluster-scoped encoder can't change cluster; the dropdown is hidden.
+	$: isClusterLocked = Boolean(data.lockedCluster);
+
+	// Barangay dropdown narrows to the chosen cluster (data.barangays is already
+	// limited to a locked encoder's cluster server-side).
+	$: barangayChoices = selectedCluster
+		? data.barangays.filter((b) => clusterIdForBarangay(b.name) === selectedCluster)
+		: data.barangays;
+
+	const onClusterChange = () => {
+		// Clear a barangay that's no longer in the chosen cluster.
+		if (
+			selectedBarangay &&
+			!barangayChoices.some((b) => b._id === selectedBarangay)
+		) {
+			selectedBarangay = '';
+		}
+		applyFilters();
+	};
 
 	// Role-based capabilities (Encoder edits/tags; Grant Officer awards grants).
 	$: userRole = $page.data.user?.role;
@@ -80,11 +105,25 @@
 		drawerStore.open(drawerAddGrant);
 	};
 
+	const drawerAddService: DrawerSettings = {
+		id: 'addService',
+		width: 'w-[280px] md:w-[520px]',
+		padding: 'p-4',
+		rounded: 'rounded-xl',
+		position: 'right'
+	};
+
+	const handleAddService = (household: Household) => {
+		selectedHousehold = household;
+		drawerStore.open(drawerAddService);
+	};
+
 	// Push the current filter state into the URL — the server load re-runs and
 	// returns just the matching page of households.
 	const applyFilters = (opts: { page?: number; limit?: number } = {}) => {
 		const params = new URLSearchParams();
 		if (searchInput.trim()) params.set('q', searchInput.trim());
+		if (selectedCluster) params.set('cluster', selectedCluster);
 		if (selectedBarangay) params.set('barangay', selectedBarangay);
 		if (selectedTag) params.set('tag', selectedTag);
 		if (selectedSortField !== 'updatedAt') params.set('sort', selectedSortField);
@@ -184,8 +223,14 @@
 			{/if}
 		</header>
 
+		{#if isClusterLocked}
+			<p class="px-4 pt-2 text-sm opacity-70">
+				Showing households in <strong>{clusterLabel(data.lockedCluster)}</strong> (your assigned cluster).
+			</p>
+		{/if}
+
 		<!-- Filters -->
-		<div class="grid grid-cols-1 md:grid-cols-4 gap-4 p-4">
+		<div class="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-5 gap-4 p-4">
 			<div class="input-group input-group-divider grid-cols-[auto_1fr_auto]">
 				<div class="input-group-shim" aria-hidden="true">🔍</div>
 				<input
@@ -197,9 +242,18 @@
 				/>
 			</div>
 
+			{#if !isClusterLocked}
+				<select bind:value={selectedCluster} on:change={onClusterChange} class="select">
+					<option value="">All Clusters</option>
+					{#each CLUSTER_OPTIONS as c}
+						<option value={c.value}>{c.label}</option>
+					{/each}
+				</select>
+			{/if}
+
 			<select bind:value={selectedBarangay} on:change={() => applyFilters()} class="select">
 				<option value="">All Barangays</option>
-				{#each data.barangays as barangay}
+				{#each barangayChoices as barangay}
 					<option value={barangay._id}>{barangay.name}</option>
 				{/each}
 			</select>
@@ -242,6 +296,7 @@
 						<th>Tag</th>
 						{#if canGrant}
 							<th>Grants</th>
+							<th>Services</th>
 						{/if}
 						<th>Last Updated</th>
 						<th class="text-center">Actions</th>
@@ -249,10 +304,10 @@
 				</thead>
 				<tbody>
 					{#if $navigating}
-						<TableSkeleton rows={6} cols={canGrant ? 7 : 6} />
+						<TableSkeleton rows={6} cols={canGrant ? 8 : 6} />
 					{:else if data.households.length === 0}
 						<tr>
-							<td colspan={canGrant ? 7 : 6} class="text-center py-8 opacity-60">
+							<td colspan={canGrant ? 8 : 6} class="text-center py-8 opacity-60">
 								{#if !hasFilters && data.total === 0}
 									No households yet. Click “Add Household” to create one.
 								{:else}
@@ -263,7 +318,27 @@
 					{:else}
 						{#each data.households as household (household._id)}
 							<tr>
-								<td>{household.fullName}</td>
+								<td>
+									{household.fullName}
+									{#if (household.subFamilyCount ?? 0) > 0}
+										<span
+											class="badge variant-soft-primary ml-1"
+											title="{household.subFamilyCount} other famil{household.subFamilyCount === 1
+												? 'y lives'
+												: 'ies live'} in this household"
+										>
+											+{household.subFamilyCount}
+											famil{household.subFamilyCount === 1 ? 'y' : 'ies'}
+										</span>
+									{:else if household.parentHouseholdId}
+										<span
+											class="badge variant-soft ml-1"
+											title="This family lives in another household's dwelling"
+										>
+											shares household
+										</span>
+									{/if}
+								</td>
 								<td>{household.barangayName}</td>
 								<td>{household.phone || '-'}</td>
 								<td>
@@ -340,6 +415,20 @@
 											<span class="opacity-40">None</span>
 										{/if}
 									</td>
+									<td>
+										{#if household.serviceCount}
+											<span
+												class="badge variant-soft-tertiary whitespace-nowrap"
+												title="{household.serviceCount} service{household.serviceCount === 1
+													? ''
+													: 's'} · ₱{Number(household.serviceTotal).toLocaleString()} total"
+											>
+												{household.serviceCount} · ₱{Number(household.serviceTotal).toLocaleString()}
+											</span>
+										{:else}
+											<span class="opacity-40">None</span>
+										{/if}
+									</td>
 								{/if}
 								<td>{new Date(household.updatedAt).toLocaleDateString()}</td>
 								<td class="text-center">
@@ -364,6 +453,12 @@
 												on:click={() => handleAddGrant(household)}
 											>
 												+ Grant
+											</button>
+											<button
+												class="btn btn-sm variant-filled-tertiary"
+												on:click={() => handleAddService(household)}
+											>
+												+ Service
 											</button>
 										{/if}
 									</div>
@@ -403,6 +498,13 @@
 			householdId={selectedHousehold._id}
 			householdName={selectedHousehold.fullName}
 			receivedGrants={selectedHousehold.grants || []}
+			{drawerStore}
+			onSuccess={refreshList}
+		/>
+	{:else if $drawerStore.id === 'addService' && selectedHousehold}
+		<ServiceCreate
+			householdId={selectedHousehold._id}
+			patientName={selectedHousehold.fullName}
 			{drawerStore}
 			onSuccess={refreshList}
 		/>

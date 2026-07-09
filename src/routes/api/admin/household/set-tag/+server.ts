@@ -2,6 +2,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import clientPromise from '$lib/server/mongo';
 import { canEditHouseholds } from '$lib/utils/roles';
+import { encoderMayAccessBarangay } from '$lib/server/clusterAccess';
 
 // Define the valid tag values
 type HouseholdTag = 'APIN' | 'KONTRA' | 'UNTAGGED';
@@ -31,6 +32,18 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 		const db = await clientPromise();
 		const collection = db.collection('households');
+
+		// A cluster-scoped encoder may only tag households inside their cluster.
+		const target = await collection.findOne(
+			{ _id: householdId },
+			{ projection: { barangayId: 1 } }
+		);
+		if (!target) {
+			return json({ error: 'Household not found' }, { status: 404 });
+		}
+		if (!(await encoderMayAccessBarangay(db, user, target.barangayId))) {
+			return json({ error: 'This household is outside your assigned cluster' }, { status: 403 });
+		}
 
 		const result = await collection.updateOne(
 			{ _id: householdId },

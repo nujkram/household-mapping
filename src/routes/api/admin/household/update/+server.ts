@@ -1,7 +1,9 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import clientPromise from '$lib/server/mongo';
-import { householdUpdateSchema, badRequest } from '$lib/server/validation';
+import { householdUpdateSchema, pickSurveyFields, badRequest } from '$lib/server/validation';
+import { encoderMayAccessBarangay } from '$lib/server/clusterAccess';
+import { syncFamilyLinks } from '$lib/server/familyLinks';
 
 export const POST: RequestHandler = async ({ request, locals }) => {
 	if (!locals.user) return json({ status: 'Error', error: 'Unauthorized' }, { status: 401 });
@@ -13,6 +15,22 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	try {
 		const db = await clientPromise();
 		const Household = db.collection('households');
+
+		// A cluster-scoped encoder may only edit households in their cluster —
+		// check both the existing record's barangay and the submitted one.
+		const existing = await Household.findOne(
+			{ _id: data._id },
+			{ projection: { barangayId: 1, parentHouseholdId: 1 } }
+		);
+		if (
+			!(await encoderMayAccessBarangay(db, locals.user, existing?.barangayId)) ||
+			!(await encoderMayAccessBarangay(db, locals.user, data.barangayId))
+		) {
+			return json(
+				{ status: 'Error', error: 'This household is outside your assigned cluster' },
+				{ status: 403 }
+			);
+		}
 
 		// Propagate the new coordinates to every household that links this one as a
 		// dependent — in a single updateMany with array filters (was an N+1 loop).
@@ -41,6 +59,8 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			isVoter: data.isVoter,
 			latitude: data.latitude,
 			longitude: data.longitude,
+			// Optional survey fields (validated by the schema)
+			...pickSurveyFields(data),
 			updatedBy: locals.user._id
 		};
 		if (data.tag) set.tag = data.tag;
@@ -50,6 +70,16 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		if (result.matchedCount === 0) {
 			return json({ status: 'Error', error: 'Household not found' }, { status: 404 });
 		}
+
+		// Multi-family dwellings: keep the family↔dwelling relation in sync with
+		// the dependent links (and share this dwelling's pin with sub-families).
+		await syncFamilyLinks(
+			db,
+			data._id,
+			data.dependentDetails,
+			{ latitude: data.latitude, longitude: data.longitude },
+			existing?.parentHouseholdId
+		);
 
 		return json({ status: 'Success', message: 'Data updated successfully' });
 	} catch (error) {

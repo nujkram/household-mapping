@@ -41,6 +41,8 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		isFake: false,
 		// Validated against the role whitelist by userInsertSchema.
 		role: data.role,
+		// Cluster scoping only applies to encoders.
+		cluster: data.role === 'ENCODER' ? data.cluster : '',
 		createdBy: locals.user._id,
 		updatedBy: locals.user._id
 	};
