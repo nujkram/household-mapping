@@ -107,7 +107,15 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 							$group: {
 								_id: '$householdId',
 								count: { $sum: 1 },
-								total: { $sum: { $ifNull: ['$amount', 0] } }
+								// Centavos; legacy float peso records fall back to ×100.
+								total: {
+									$sum: {
+										$ifNull: [
+											'$amountCentavos',
+											{ $multiply: [{ $ifNull: ['$amount', 0] }, 100] }
+										]
+									}
+								}
 							}
 						}
 					])

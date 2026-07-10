@@ -74,10 +74,12 @@ export const householdSurveySchema = z.object({
 	occupationVending: z.boolean().optional().default(false),
 	occupationToda: z.boolean().optional().default(false),
 	occupationOther: optionalUpperText,
-	averageIncome: z.preprocess(
-		(v) => (v === '' || v === null || v === undefined ? null : Number(v)),
-		z.number().nonnegative('must be 0 or more').nullable()
-	),
+	// Comma-tolerant; junk/NaN becomes null instead of poisoning aggregations.
+	averageIncome: z.preprocess((v) => {
+		if (v === '' || v === null || v === undefined) return null;
+		const n = typeof v === 'number' ? v : Number(String(v).replace(/,/g, '').trim());
+		return Number.isFinite(n) ? n : null;
+	}, z.number().nonnegative('must be 0 or more').nullable()),
 	housingType: optionalEnum(['O', 'R'] as const),
 	housingMaterials: optionalEnum(['CONCRETE', 'SEMI_CONCRETE', 'WOOD', 'LIGHT_MATERIALS'] as const),
 	landOwnership: optionalEnum(['O', 'N', 'T'] as const),
@@ -174,7 +176,13 @@ export const serviceInsertSchema = z.object({
 		.array(z.enum(['REGULAR', 'PWD', 'SENIOR', '4PS', 'ANIMAL_BITE']))
 		.optional()
 		.default([]),
-	amount: z.coerce.number().nonnegative('must be 0 or more'),
+	// Peso amount in (comma-tolerant); endpoints store it as integer centavos.
+	// Blank/junk becomes undefined → rejected as required (never stored as NaN).
+	amount: z.preprocess((v) => {
+		if (v === '' || v === null || v === undefined) return undefined;
+		const n = typeof v === 'number' ? v : Number(String(v).replace(/,/g, '').trim());
+		return Number.isFinite(n) ? n : undefined;
+	}, z.number().nonnegative('must be 0 or more')),
 	dateReceived: z
 		.string()
 		.trim()

@@ -22,6 +22,7 @@
 	} from '$lib/utils/householdOptions';
 	import { submitJson } from '$lib/utils/apiHelper';
 	import { canEditHouseholds, canManageGrants } from '$lib/utils/roles';
+	import { serviceCentavos, formatCentavos } from '$lib/utils/money';
 	import { page } from '$app/stores';
 	import Update from '$lib/components/forms/household/Update.svelte';
 	import AddGrant from '$lib/components/forms/household/AddGrant.svelte';
@@ -81,7 +82,7 @@
 	$: subFamilies = (data.subFamilies as any[]) || [];
 	$: parentHousehold = data.parentHousehold as any;
 
-	const peso = (n: number | undefined) => `₱${Number(n || 0).toLocaleString()}`;
+	const serviceAmount = (svc: Service) => formatCentavos(serviceCentavos(svc));
 
 	const handleEditService = (service: Service) => {
 		selectedService = service;
@@ -91,7 +92,7 @@
 	const handleDeleteService = (service: Service) => {
 		showActionConfirmationToast(
 			toastStore,
-			`Delete the service for "${service.patientName}" (${peso(service.amount)})?`,
+			`Delete the service for "${service.patientName}" (${serviceAmount(service)})?`,
 			'Delete',
 			async () => {
 				try {
@@ -654,7 +655,7 @@
 												<span class="opacity-40">—</span>
 											{/if}
 										</td>
-										<td>{peso(service.amount)}</td>
+										<td>{serviceAmount(service)}</td>
 										<td>{formatDate(service.dateReceived)}</td>
 										{#if canGrant}
 											<td class="text-center">

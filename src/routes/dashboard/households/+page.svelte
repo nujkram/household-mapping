@@ -14,6 +14,7 @@
 	import { canEditHouseholds, canManageGrants } from '$lib/utils/roles';
 	import { getTagConfig } from '$lib/utils/tagHelper';
 	import { CLUSTER_OPTIONS, clusterLabel, resolveClusterId } from '$lib/utils/clusters';
+	import { formatCentavos } from '$lib/utils/money';
 
 	interface PageData {
 		households: Household[];
@@ -421,9 +422,9 @@
 												class="badge variant-soft-tertiary whitespace-nowrap"
 												title="{household.serviceCount} service{household.serviceCount === 1
 													? ''
-													: 's'} · ₱{Number(household.serviceTotal).toLocaleString()} total"
+													: 's'} · {formatCentavos(household.serviceTotal)} total"
 											>
-												{household.serviceCount} · ₱{Number(household.serviceTotal).toLocaleString()}
+												{household.serviceCount} · {formatCentavos(household.serviceTotal)}
 											</span>
 										{:else}
 											<span class="opacity-40">None</span>

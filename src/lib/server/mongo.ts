@@ -42,8 +42,14 @@ const ensureIndexes = async (db: Db): Promise<void> => {
 		['households', { 'dependentDetails.linkedHouseholdId': 1 }],
 		['households', { 'grants.grantId': 1 }],
 		['households', { parentHouseholdId: 1 }],
+		// List sorts (updatedAt / fullName) — avoid full in-memory sorts at scale.
+		['households', { isActive: 1, updatedAt: -1 }],
+		['households', { isActive: 1, fullName: 1 }],
+		['households', { tag: 1 }],
 		['grants', { name: 1, year: 1 }, { unique: true }],
 		['services', { dateReceived: -1 }],
+		// Service lookups + the per-household service totals on the list page.
+		['services', { householdId: 1 }],
 		['barangays', { isActive: 1, name: 1 }]
 	];
 

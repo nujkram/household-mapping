@@ -3,6 +3,7 @@ import type { PageServerLoad } from './$types';
 import type { Barangay, SessionUser } from '$lib/utils/types';
 import { ROLES } from '$lib/utils/roles';
 import { CLUSTERS, resolveClusterId } from '$lib/utils/clusters';
+import { NUMERIC_STRING } from '$lib/utils/geo';
 import clientPromise from '$lib/server/mongo';
 
 type HouseholdDocument = {
@@ -29,14 +30,17 @@ export const load: PageServerLoad = async ({ locals }) => {
 	const Household = db.collection('households');
 
 	// Tag counts are cheap and useful to every role.
-	const tagGroups = (await Household.aggregate([
-		{
-			$group: {
-				_id: { $ifNull: ['$tag', 'UNTAGGED'] },
-				count: { $sum: 1 }
+	const tagGroups = (await Household.aggregate(
+		[
+			{
+				$group: {
+					_id: { $ifNull: ['$tag', 'UNTAGGED'] },
+					count: { $sum: 1 }
+				}
 			}
-		}
-	]).toArray()) as { _id: string; count: number }[];
+		],
+		{ allowDiskUse: true }
+	).toArray()) as { _id: string; count: number }[];
 
 	const tagCounts = { APIN: 0, KONTRA: 0, UNTAGGED: 0 };
 	for (const group of tagGroups) {
@@ -82,7 +86,14 @@ export const load: PageServerLoad = async ({ locals }) => {
 				],
 				voters: [{ $match: { isVoter: true } }, { $count: 'count' }],
 				located: [
-					{ $match: { latitude: { $exists: true, $nin: [null, ''] } } },
+					// Only count coordinates that actually parse to numbers (matches the
+					// map), so 'NaN'/'abc'/'' don't inflate the KPI.
+					{
+						$match: {
+							latitude: { $regex: NUMERIC_STRING },
+							longitude: { $regex: NUMERIC_STRING }
+						}
+					},
 					{ $count: 'count' }
 				],
 				perBarangayTag: [
@@ -108,12 +119,12 @@ export const load: PageServerLoad = async ({ locals }) => {
 				]
 			}
 		}
-	]).toArray();
+	], { allowDiskUse: true }).toArray();
 
 	const [barangays, householdsWithCoords, facets, activeGrants, totalGrants] = await Promise.all([
 		Barangay.find().toArray(),
 		Household.find(
-			{ latitude: { $exists: true }, longitude: { $exists: true } },
+			{ latitude: { $regex: NUMERIC_STRING }, longitude: { $regex: NUMERIC_STRING } },
 			{ projection: { latitude: 1, longitude: 1, tag: 1 } }
 		).toArray() as unknown as Promise<HouseholdDocument[]>,
 		facetPromise,

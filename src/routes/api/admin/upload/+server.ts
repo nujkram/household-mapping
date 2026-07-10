@@ -10,40 +10,54 @@ import clientPromise from '$lib/server/mongo';
 const BATCH_SIZE = 1000;
 
 const compoundLastNames = ['DE LOS', 'DE LAS', 'DE LA', 'DELA', 'DEL', 'DE'];
+const NAME_SUFFIXES = new Set(['JR', 'JR.', 'SR', 'SR.', 'II', 'III', 'IV', 'V']);
 
 /**
- * Parse a "LASTNAME, FIRSTNAME MIDDLENAME" cell into parts, handling compound
- * last names that appear in the first/middle section (e.g. "SANTOS DE LA CRUZ").
+ * Parse a "LASTNAME, FIRSTNAME MIDDLENAME" cell into parts.
+ * Handles: surrounding quotes, collapsed whitespace, name suffixes (JR/III/…),
+ * compound last names in the first/middle section, and single-token names.
+ *
+ * NOTE: distinguishing a two-word FIRST name ("MARIA LOURDES") from
+ * first+middle is inherently ambiguous without more data; by convention the
+ * trailing token is treated as the middle name. A suffix is kept with the
+ * first name so no token is silently lost.
  */
-const parseName = (raw: string): { firstName: string; middleName: string; lastName: string } => {
-	const fullName = (raw || '').replace(/"/g, '').trim();
-	const [lastNamePart = '', firstMiddlePart = ''] = fullName.split(',').map((p) => p.trim());
+const parseName = (
+	raw: string
+): { firstName: string; middleName: string; lastName: string } => {
+	const cleaned = (raw || '').replace(/"/g, '').replace(/\s+/g, ' ').trim().toUpperCase();
+	const [lastNamePart = '', firstMiddlePart = ''] = cleaned.split(',').map((p) => p.trim());
 
 	const nameParts = firstMiddlePart.split(' ').filter(Boolean);
 	let lastName = lastNamePart;
-	let firstName = '';
-	let middleName = '';
+
+	// Pull a trailing suffix (JR, III, …) so it isn't mistaken for a middle name.
+	let suffix = '';
+	if (nameParts.length > 1 && NAME_SUFFIXES.has(nameParts[nameParts.length - 1])) {
+		suffix = nameParts.pop() as string;
+	}
 
 	if (nameParts.length >= 2) {
-		// Look for a compound last-name marker; if found, move it and everything
-		// after it into the last name. (Previously this used Array.slice(string),
-		// which coerced to slice(0) and never worked.)
+		// Move a compound last-name marker (+ everything after it) into the last name.
 		for (let i = 0; i < nameParts.length; i++) {
 			const rest = nameParts.slice(i).join(' ');
 			if (compoundLastNames.some((c) => rest === c || rest.startsWith(`${c} `))) {
-				const suffix = nameParts.splice(i).join(' ');
-				lastName = `${lastName} ${suffix}`.trim();
+				lastName = `${lastName} ${nameParts.splice(i).join(' ')}`.trim();
 				break;
 			}
 		}
 	}
 
+	let firstName = '';
+	let middleName = '';
 	if (nameParts.length >= 2) {
 		firstName = nameParts.slice(0, -1).join(' ');
 		middleName = nameParts[nameParts.length - 1];
 	} else if (nameParts.length === 1) {
 		firstName = nameParts[0];
 	}
+
+	if (suffix) firstName = `${firstName} ${suffix}`.trim();
 
 	return { firstName, middleName, lastName };
 };

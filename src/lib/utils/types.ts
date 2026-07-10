@@ -108,7 +108,10 @@ export type Service = {
 	householdId?: string;
 	patientName: string;
 	categories: string[];
-	amount: number;
+	/** Canonical amount in integer centavos. */
+	amountCentavos?: number;
+	/** Legacy float peso amount (pre-centavos records). */
+	amount?: number;
 	dateReceived: string;
 	createdAt?: string;
 	updatedAt?: string;

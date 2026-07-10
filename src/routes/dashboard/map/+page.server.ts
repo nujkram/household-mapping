@@ -1,6 +1,7 @@
 import type { PageServerLoad } from './$types';
 import clientPromise from '$lib/server/mongo';
 import { scopedClusterFor, barangayIdsInCluster } from '$lib/server/clusterAccess';
+import { NUMERIC_STRING } from '$lib/utils/geo';
 
 export const ssr = false;
 
@@ -27,8 +28,8 @@ export const load: PageServerLoad = async ({ locals }) => {
 			.find(
 				{
 					isActive: true,
-					latitude: { $exists: true },
-					longitude: { $exists: true },
+					latitude: { $regex: NUMERIC_STRING },
+					longitude: { $regex: NUMERIC_STRING },
 					...householdScope
 				},
 				{

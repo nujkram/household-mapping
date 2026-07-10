@@ -3,6 +3,7 @@
 	import { showToast } from '$lib/utils/toastHelper';
 	import { submitJson } from '$lib/utils/apiHelper';
 	import { SERVICE_CATEGORY_OPTIONS } from '$lib/utils/serviceOptions';
+	import { serviceCentavos, centavosToPesos } from '$lib/utils/money';
 	import type { Service } from '$lib/utils/types';
 
 	export let drawerStore: DrawerStore;
@@ -16,7 +17,7 @@
 
 	let patientName = data.patientName;
 	let categories: string[] = [...(data.categories || [])];
-	let amount: number | null = data.amount ?? null;
+	let amount: number | null = centavosToPesos(serviceCentavos(data));
 	let dateReceived = (data.dateReceived || '').slice(0, 10);
 
 	const handleSubmit = async () => {
