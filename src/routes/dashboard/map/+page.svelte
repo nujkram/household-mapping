@@ -13,38 +13,27 @@
 	let clusterer: MarkerClusterer;
 	let isLoading = true;
 	let loadError = '';
-	// Markers are keyed by household _id so we can reuse them across filter
-	// changes instead of destroying and recreating every marker each keystroke.
+	let fetching = false;
+	let capped = false;
+	let visibleCount = 0;
+
+	// Markers reused across viewport refreshes, keyed by household _id.
 	const markersById = new Map<string, google.maps.Marker>();
+	// barangayId -> name, for InfoWindow display (households come back with ids).
+	const barangayName = new Map<string, string>(
+		(data.barangays as any[]).map((b) => [b._id, b.name])
+	);
 
 	let searchTerm = '';
 	let selectedBarangay = '';
 	let selectedTag = '';
 	let mapElement: HTMLDivElement;
 
-	// Debounced copy of the search term so we don't re-run the marker diff on
-	// every single keystroke.
-	let debouncedSearch = '';
 	let debounceTimer: ReturnType<typeof setTimeout>;
-	$: {
+	const scheduleFetch = (delay = 250) => {
 		clearTimeout(debounceTimer);
-		const next = searchTerm;
-		debounceTimer = setTimeout(() => (debouncedSearch = next), 250);
-	}
-
-	$: filteredHouseholds = data.households.filter((household: any) => {
-		const term = debouncedSearch.toLowerCase();
-		const matchesSearch =
-			term === '' ||
-			household.name?.toLowerCase().includes(term) ||
-			household.barangayName?.toLowerCase().includes(term);
-		const matchesBarangay = selectedBarangay === '' || household.barangayId === selectedBarangay;
-		const matchesTag = selectedTag === '' || (household.tag || 'UNTAGGED') === selectedTag;
-		return matchesSearch && matchesBarangay && matchesTag;
-	});
-
-	// Re-sync markers whenever the filtered set changes and the map is ready.
-	$: if (map && clusterer) syncMarkers(filteredHouseholds);
+		debounceTimer = setTimeout(fetchInView, delay);
+	};
 
 	function getMarkerIcon(tag: string | null): google.maps.Symbol {
 		return {
@@ -57,54 +46,73 @@
 		};
 	}
 
-	function buildInfoContent(household: any): string {
+	function buildInfoContent(h: any): string {
 		return `
 			<div class="info-window text-black">
-				<strong>${escapeHtml(household.fullName || 'Unnamed Household')}</strong><br>
-				Barangay: ${escapeHtml(household.barangayName)}<br>
-				Tag: ${escapeHtml(household.tag || 'UNTAGGED')}<br>
-				Address: ${escapeHtml(household.address || 'No address')}
+				<strong>${escapeHtml(h.fullName || 'Unnamed Household')}</strong><br>
+				Barangay: ${escapeHtml(barangayName.get(h.barangayId) || 'Unknown')}<br>
+				Tag: ${escapeHtml(h.tag || 'UNTAGGED')}<br>
+				Address: ${escapeHtml(h.address || 'No address')}
 			</div>
 		`;
 	}
 
+	// Fetch only the households inside the current viewport (+ active filters).
+	async function fetchInView() {
+		if (!map || !clusterer) return;
+		const bounds = map.getBounds();
+		if (!bounds) return;
+		const sw = bounds.getSouthWest();
+		const ne = bounds.getNorthEast();
+
+		const params = new URLSearchParams({
+			swLat: String(sw.lat()),
+			swLng: String(sw.lng()),
+			neLat: String(ne.lat()),
+			neLng: String(ne.lng())
+		});
+		if (searchTerm.trim()) params.set('q', searchTerm.trim());
+		if (selectedBarangay) params.set('barangay', selectedBarangay);
+		if (selectedTag) params.set('tag', selectedTag);
+
+		fetching = true;
+		try {
+			const res = await fetch(`/api/admin/household/map?${params}`);
+			const result = await res.json();
+			if (!res.ok) throw new Error(result?.error || 'Failed to load households');
+			syncMarkers(result.households || []);
+			capped = Boolean(result.capped);
+			visibleCount = (result.households || []).length;
+		} catch (error) {
+			console.error('Error loading households in view:', error);
+		} finally {
+			fetching = false;
+		}
+	}
+
 	function syncMarkers(households: any[]) {
 		const nextIds = new Set<string>();
-
-		for (const household of households) {
-			const lat = Number.parseFloat(household.latitude);
-			const lng = Number.parseFloat(household.longitude);
-			if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
-
-			nextIds.add(household._id);
-			const existing = markersById.get(household._id);
-
+		for (const h of households) {
+			if (!Number.isFinite(h.lat) || !Number.isFinite(h.lng)) continue;
+			nextIds.add(h._id);
+			const existing = markersById.get(h._id);
 			if (existing) {
-				// Reuse: only update what may have changed.
-				existing.setIcon(getMarkerIcon(household.tag));
+				existing.setIcon(getMarkerIcon(h.tag));
 			} else {
-				// No `map` here — the clusterer owns marker attachment.
 				const marker = new google.maps.Marker({
-					position: { lat, lng },
-					icon: getMarkerIcon(household.tag)
+					position: { lat: h.lat, lng: h.lng },
+					icon: getMarkerIcon(h.tag)
 				});
 				marker.addListener('click', () => {
-					infoWindow.setContent(buildInfoContent(household));
+					infoWindow.setContent(buildInfoContent(h));
 					infoWindow.open(map, marker);
 				});
-				markersById.set(household._id, marker);
+				markersById.set(h._id, marker);
 			}
 		}
-
-		// Drop markers no longer in the filtered set.
 		for (const [id] of markersById) {
-			if (!nextIds.has(id)) {
-				markersById.delete(id);
-			}
+			if (!nextIds.has(id)) markersById.delete(id);
 		}
-
-		// Hand the current set to the clusterer — it groups nearby markers into
-		// cluster bubbles so thousands of households stay fast and readable.
 		clusterer.clearMarkers(true);
 		clusterer.addMarkers([...markersById.values()]);
 	}
@@ -123,16 +131,14 @@
 			map = new google.maps.Map(mapElement, {
 				center: { lat: 11.442339253918387, lng: 122.69376754760742 },
 				zoom: 12,
-				styles: [
-					{ featureType: 'poi', elementType: 'labels', stylers: [{ visibility: 'off' }] }
-				]
+				styles: [{ featureType: 'poi', elementType: 'labels', stylers: [{ visibility: 'off' }] }]
 			});
 
-			// One shared InfoWindow reused for every marker.
 			infoWindow = new google.maps.InfoWindow();
 			clusterer = new MarkerClusterer({ map });
 
-			syncMarkers(filteredHouseholds);
+			// Refetch whenever the user finishes panning/zooming.
+			map.addListener('idle', () => scheduleFetch(250));
 		} catch (error) {
 			loadError = 'Failed to load the map. Please try reloading the page.';
 			console.error('Error loading map:', error);
@@ -159,12 +165,18 @@
 			id="map-search"
 			type="text"
 			bind:value={searchTerm}
+			on:input={() => scheduleFetch(400)}
 			placeholder="Search by name..."
 			class="input p-2 border rounded"
 		/>
 
 		<label class="sr-only" for="map-barangay">Filter by barangay</label>
-		<select id="map-barangay" bind:value={selectedBarangay} class="p-2 border rounded select">
+		<select
+			id="map-barangay"
+			bind:value={selectedBarangay}
+			on:change={() => scheduleFetch(0)}
+			class="p-2 border rounded select"
+		>
 			<option value="">All Barangays</option>
 			{#each data.barangays as barangay}
 				<option value={barangay._id}>{barangay.name}</option>
@@ -172,7 +184,12 @@
 		</select>
 
 		<label class="sr-only" for="map-tag">Filter by tag</label>
-		<select id="map-tag" bind:value={selectedTag} class="p-2 border rounded select">
+		<select
+			id="map-tag"
+			bind:value={selectedTag}
+			on:change={() => scheduleFetch(0)}
+			class="p-2 border rounded select"
+		>
 			<option value="">All Tags</option>
 			{#each TAG_VALUES as tag}
 				<option value={tag}>{tag}</option>
@@ -191,7 +208,10 @@
 
 	{#if !isLoading && !loadError}
 		<p class="text-sm opacity-60 mb-2">
-			Showing {filteredHouseholds.length} of {data.households.length} households
+			{fetching ? 'Loading…' : `Showing ${visibleCount} households in view`}
+			{#if capped}
+				<span class="text-warning-600">— too many to show all; zoom in to see the rest.</span>
+			{/if}
 		</p>
 	{/if}
 
@@ -205,9 +225,7 @@
 				<p class="opacity-70">Loading map…</p>
 			</div>
 		{:else if loadError}
-			<div
-				class="absolute inset-0 flex items-center justify-center bg-surface-100/60 rounded-lg"
-			>
+			<div class="absolute inset-0 flex items-center justify-center bg-surface-100/60 rounded-lg">
 				<p class="text-error-500">{loadError}</p>
 			</div>
 		{/if}

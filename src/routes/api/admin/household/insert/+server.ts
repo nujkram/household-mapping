@@ -5,6 +5,7 @@ import clientPromise from '$lib/server/mongo';
 import { householdInsertSchema, pickSurveyFields, badRequest } from '$lib/server/validation';
 import { encoderMayAccessBarangay } from '$lib/server/clusterAccess';
 import { syncFamilyLinks } from '$lib/server/familyLinks';
+import { parseCoord } from '$lib/utils/geo';
 
 export const POST: RequestHandler = async ({ request, locals }) => {
 	if (!locals.user) return json({ status: 'Error', error: 'Unauthorized' }, { status: 401 });
@@ -42,6 +43,9 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		dependentDetails: data.dependentDetails,
 		latitude: data.latitude,
 		longitude: data.longitude,
+		// Numeric mirror of the coordinates for indexed viewport/bounds queries.
+		lat: parseCoord(data.latitude),
+		lng: parseCoord(data.longitude),
 		// Optional survey fields (validated by the schema, '' / false / null = not answered)
 		...pickSurveyFields(data),
 		// Set by syncFamilyLinks when another record links this family as a member.

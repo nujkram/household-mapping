@@ -1,4 +1,5 @@
 import type { Db } from 'mongodb';
+import { parseCoord } from '$lib/utils/geo';
 
 type DependentLike = { linkedHouseholdId?: string | null };
 
@@ -64,6 +65,8 @@ export const syncFamilyLinks = async (
 		if (coords?.latitude && coords?.longitude) {
 			set.latitude = coords.latitude;
 			set.longitude = coords.longitude;
+			set.lat = parseCoord(coords.latitude);
+			set.lng = parseCoord(coords.longitude);
 		}
 		await Household.updateMany({ _id: { $in: linkedIds } }, { $set: set });
 	}

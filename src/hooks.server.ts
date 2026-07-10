@@ -29,6 +29,7 @@ const ROUTE_ROLES: [prefix: string, roles: Role[]][] = [
 	['/api/admin/household/insert', HOUSEHOLD_EDITORS],
 	['/api/admin/household/update', HOUSEHOLD_EDITORS],
 	['/api/admin/household/list', HOUSEHOLD_EDITORS],
+	['/api/admin/household/map', HOUSEHOLD_EDITORS],
 	['/api/admin/grant', GRANT_MANAGERS],
 	['/api/admin/service', GRANT_MANAGERS],
 	// Pages

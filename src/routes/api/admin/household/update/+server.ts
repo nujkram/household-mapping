@@ -4,6 +4,7 @@ import clientPromise from '$lib/server/mongo';
 import { householdUpdateSchema, pickSurveyFields, badRequest } from '$lib/server/validation';
 import { encoderMayAccessBarangay } from '$lib/server/clusterAccess';
 import { syncFamilyLinks } from '$lib/server/familyLinks';
+import { parseCoord } from '$lib/utils/geo';
 
 export const POST: RequestHandler = async ({ request, locals }) => {
 	if (!locals.user) return json({ status: 'Error', error: 'Unauthorized' }, { status: 401 });
@@ -46,6 +47,9 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			isVoter: data.isVoter,
 			latitude: data.latitude,
 			longitude: data.longitude,
+			// Numeric mirror for indexed viewport/bounds queries.
+			lat: parseCoord(data.latitude),
+			lng: parseCoord(data.longitude),
 			// Optional survey fields (validated by the schema)
 			...pickSurveyFields(data),
 			updatedBy: locals.user._id

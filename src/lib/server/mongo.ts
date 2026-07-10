@@ -46,6 +46,8 @@ const ensureIndexes = async (db: Db): Promise<void> => {
 		['households', { isActive: 1, updatedAt: -1 }],
 		['households', { isActive: 1, fullName: 1 }],
 		['households', { tag: 1 }],
+		// Numeric coordinate mirror for indexed viewport/bounds queries.
+		['households', { lat: 1, lng: 1 }],
 		['grants', { name: 1, year: 1 }, { unique: true }],
 		['services', { dateReceived: -1 }],
 		// Service lookups + the per-household service totals on the list page.
