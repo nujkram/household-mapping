@@ -1,3 +1,4 @@
+import { error } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 import clientPromise from '$lib/server/mongo';
 
@@ -29,8 +30,8 @@ export const load: PageServerLoad = async () => {
 		]).toArray();
 
 		return { grants };
-	} catch (error) {
-		console.error('Error loading grants:', error);
-		return { grants: [] };
+	} catch (err) {
+		console.error('Error loading grants:', err);
+		throw error(500, 'Could not load grants. Please try again.');
 	}
 };

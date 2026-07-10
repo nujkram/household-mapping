@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { id } from '$lib/common/utils';
-import clientPromise from '$lib/server/mongo';
+import clientPromise, { withTransaction } from '$lib/server/mongo';
 import { householdInsertSchema, pickSurveyFields, badRequest } from '$lib/server/validation';
 import { encoderMayAccessBarangay } from '$lib/server/clusterAccess';
 import { syncFamilyLinks } from '$lib/server/familyLinks';
@@ -57,13 +57,19 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		updatedBy: locals.user._id
 	};
 
-	await Household.insertOne(household);
-
-	// Multi-family dwellings: dependents linked at creation make those families
-	// members of this new dwelling.
-	await syncFamilyLinks(db, household._id, data.dependentDetails, {
-		latitude: data.latitude,
-		longitude: data.longitude
+	// Insert + family-link resync commit all-or-nothing.
+	await withTransaction(async (session) => {
+		await Household.insertOne(household, session ? { session } : {});
+		// Multi-family dwellings: dependents linked at creation make those families
+		// members of this new dwelling.
+		await syncFamilyLinks(
+			db,
+			household._id,
+			data.dependentDetails,
+			{ latitude: data.latitude, longitude: data.longitude },
+			undefined,
+			session
+		);
 	});
 
 	return json({ status: 'Success', message: 'Data inserted successfully' });

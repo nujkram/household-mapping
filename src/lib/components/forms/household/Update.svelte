@@ -230,6 +230,8 @@
 					latitude: data.latitude,
 					longitude: data.longitude,
 					tag: data.tag,
+					// Optimistic concurrency token — the version we loaded.
+					expectedUpdatedAt: data.updatedAt,
 					...survey
 				})
 			});

@@ -1,4 +1,4 @@
-import type { Db } from 'mongodb';
+import type { Db, ClientSession } from 'mongodb';
 import { parseCoord } from '$lib/utils/geo';
 
 type DependentLike = { linkedHouseholdId?: string | null };
@@ -22,9 +22,12 @@ export const syncFamilyLinks = async (
 	dependentDetails: DependentLike[] | undefined,
 	coords?: { latitude?: string; longitude?: string },
 	/** The host's own parent, used to seed the ancestor walk. */
-	hostParentId?: string | null
+	hostParentId?: string | null,
+	/** When set, all writes run inside this transaction. */
+	session?: ClientSession
 ): Promise<void> => {
 	const Household = db.collection('households');
+	const opts = session ? { session } : {};
 
 	let linkedIds = [
 		...new Set(
@@ -45,7 +48,7 @@ export const syncFamilyLinks = async (
 			ancestors.add(cur);
 			const parent = await Household.findOne(
 				{ _id: cur },
-				{ projection: { parentHouseholdId: 1 } }
+				{ projection: { parentHouseholdId: 1 }, ...opts }
 			);
 			cur = (parent?.parentHouseholdId as string) || null;
 		}
@@ -55,10 +58,12 @@ export const syncFamilyLinks = async (
 	if (linkedIds.length > 0) {
 		// 2. Steal-reconcile: detach these families from any OTHER dwelling's
 		//    roster so a person can't be listed under two households.
-		await Household.updateMany({ _id: { $ne: hostId }, 'dependentDetails.linkedHouseholdId': { $in: linkedIds } }, {
+		await Household.updateMany(
+			{ _id: { $ne: hostId }, 'dependentDetails.linkedHouseholdId': { $in: linkedIds } },
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any
-			$pull: { dependentDetails: { linkedHouseholdId: { $in: linkedIds } } }
-		} as any);
+			{ $pull: { dependentDetails: { linkedHouseholdId: { $in: linkedIds } } } } as any,
+			opts
+		);
 
 		// 3. Link + share the dwelling pin.
 		const set: Record<string, unknown> = { parentHouseholdId: hostId };
@@ -68,12 +73,13 @@ export const syncFamilyLinks = async (
 			set.lat = parseCoord(coords.latitude);
 			set.lng = parseCoord(coords.longitude);
 		}
-		await Household.updateMany({ _id: { $in: linkedIds } }, { $set: set });
+		await Household.updateMany({ _id: { $in: linkedIds } }, { $set: set }, opts);
 	}
 
 	// 4. Release records no longer linked as members of this dwelling.
 	await Household.updateMany(
 		{ parentHouseholdId: hostId, _id: { $nin: linkedIds } },
-		{ $set: { parentHouseholdId: '' } }
+		{ $set: { parentHouseholdId: '' } },
+		opts
 	);
 };

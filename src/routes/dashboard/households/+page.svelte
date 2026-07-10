@@ -199,6 +199,15 @@
 		drawerStore.open(drawerUpdate);
 	}
 
+	// Which row's tag menu is open (click-toggle, works on touch — the old
+	// hover/:focus-within menu was unreachable by tap on mobile).
+	let openTagFor: string | null = null;
+	const toggleTagMenu = (id: string) => (openTagFor = openTagFor === id ? null : id);
+	const chooseTag = (household: Household, tag: 'APIN' | 'KONTRA' | 'UNTAGGED') => {
+		openTagFor = null;
+		handleSetTag(household, tag);
+	};
+
 	// Re-run the server load after a create/update so the table reflects it.
 	const refreshList = () => invalidateAll();
 
@@ -212,6 +221,9 @@
 		? data.barangays.find((b) => b._id === selectedHousehold?.barangayId)
 		: undefined;
 </script>
+
+<!-- Close the open tag menu on any outside click. -->
+<svelte:window on:click={() => (openTagFor = null)} />
 
 <div class="container mx-auto p-4">
 	<div class="card p-4">
@@ -346,45 +358,55 @@
 									{#if canEdit}
 										<div class="dropdown">
 											<button
+												type="button"
+												aria-haspopup="menu"
+												aria-expanded={openTagFor === household._id}
 												class="btn {household.tag === 'APIN'
 													? 'variant-filled-success'
 													: household.tag === 'KONTRA'
 														? 'variant-filled-error'
 														: 'variant-filled-surface'} btn-sm"
+												on:click|stopPropagation={() => toggleTagMenu(household._id)}
 											>
-												{household.tag || 'UNTAGGED'}
+												{household.tag || 'UNTAGGED'} ▾
 											</button>
-											<div
-												class="dropdown-menu absolute top-full left-0 bg-surface-100 rounded-md shadow-md"
-											>
-												<button
-													class="w-full px-4 py-2 text-left hover:bg-surface-400 {household.tag ===
-													'APIN'
-														? 'bg-success-500/20'
-														: ''} variant-filled-surface"
-													on:click={() => handleSetTag(household, 'APIN')}
+											{#if openTagFor === household._id}
+												<div
+													role="menu"
+													class="dropdown-menu absolute top-full left-0 bg-surface-100 rounded-md shadow-md"
 												>
-													APIN
-												</button>
-												<button
-													class="w-full px-4 py-2 text-left hover:bg-surface-400 {household.tag ===
-													'KONTRA'
-														? 'bg-error-500/20'
-														: ''} variant-filled-surface"
-													on:click={() => handleSetTag(household, 'KONTRA')}
-												>
-													KONTRA
-												</button>
-												<button
-													class="w-full px-4 py-2 text-left hover:bg-surface-400 {household.tag ===
-													'UNTAGGED'
-														? 'bg-surface-500/20'
-														: ''} variant-filled-surface"
-													on:click={() => handleSetTag(household, 'UNTAGGED')}
-												>
-													UNTAGGED
-												</button>
-											</div>
+													<button
+														role="menuitem"
+														class="w-full px-4 py-2 text-left hover:bg-surface-400 {household.tag ===
+														'APIN'
+															? 'bg-success-500/20'
+															: ''} variant-filled-surface"
+														on:click|stopPropagation={() => chooseTag(household, 'APIN')}
+													>
+														APIN
+													</button>
+													<button
+														role="menuitem"
+														class="w-full px-4 py-2 text-left hover:bg-surface-400 {household.tag ===
+														'KONTRA'
+															? 'bg-error-500/20'
+															: ''} variant-filled-surface"
+														on:click|stopPropagation={() => chooseTag(household, 'KONTRA')}
+													>
+														KONTRA
+													</button>
+													<button
+														role="menuitem"
+														class="w-full px-4 py-2 text-left hover:bg-surface-400 {household.tag ===
+														'UNTAGGED'
+															? 'bg-surface-500/20'
+															: ''} variant-filled-surface"
+														on:click|stopPropagation={() => chooseTag(household, 'UNTAGGED')}
+													>
+														UNTAGGED
+													</button>
+												</div>
+											{/if}
 										</div>
 									{:else}
 										<!-- Read-only color dot only: green APIN / red KONTRA / grey UNTAGGED.
@@ -518,18 +540,13 @@
 		display: inline-block;
 	}
 
+	/* Menu visibility is controlled by a click-toggle (works on touch); this just
+	   positions it. */
 	.dropdown-menu {
-		display: none;
 		position: absolute;
 		background-color: var(--color-surface-100);
 		min-width: 120px;
 		box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
-		z-index: 1;
-	}
-
-	/* focus-within keeps the menu reachable by keyboard and touch, not just hover */
-	.dropdown:hover .dropdown-menu,
-	.dropdown:focus-within .dropdown-menu {
-		display: block;
+		z-index: 10;
 	}
 </style>

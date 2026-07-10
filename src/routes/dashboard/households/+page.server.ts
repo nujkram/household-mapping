@@ -1,3 +1,4 @@
+import { error } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 import clientPromise from '$lib/server/mongo';
 import { scopedClusterFor } from '$lib/server/clusterAccess';
@@ -145,21 +146,9 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 			cluster,
 			lockedCluster: lockedCluster ?? ''
 		};
-	} catch (error) {
-		console.error('Error loading households:', error);
-		return {
-			households: [],
-			barangays: [],
-			total: 0,
-			page: 0,
-			limit,
-			q,
-			barangay,
-			tag,
-			sort,
-			dir: 'desc',
-			cluster,
-			lockedCluster: lockedCluster ?? ''
-		};
+	} catch (err) {
+		console.error('Error loading households:', err);
+		// Surface the failure instead of rendering an indistinguishable "no data" page.
+		throw error(500, 'Could not load households. Please try again.');
 	}
 };

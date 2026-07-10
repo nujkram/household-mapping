@@ -1,5 +1,5 @@
 export const ssr = false;
-import { redirect } from '@sveltejs/kit';
+import { redirect, error } from '@sveltejs/kit';
 
 /** @type {import('./$types').PageServerLoad} */
 export const load = async ({
@@ -13,19 +13,17 @@ export const load = async ({
 		throw redirect(302, '/auth/login');
 	}
 
-	let barangays = [];
 	try {
 		const res = await fetch('/api/admin/barangay', {
 			method: 'GET',
-			headers: {
-				'Content-Type': 'application/json'
-			}
+			headers: { 'Content-Type': 'application/json' }
 		});
+		if (!res.ok) throw new Error(`barangay API returned ${res.status}`);
 		const result = await res.json();
-		barangays = result.response;
-	} catch (error) {
-		console.error('error', error);
+		// Surface a real error instead of silently rendering an empty list.
+		return { barangays: result.response ?? [], user: locals.user };
+	} catch (err) {
+		console.error('Error loading barangays:', err);
+		throw error(500, 'Could not load barangays. Please try again.');
 	}
-
-	return { barangays, user: locals.user };
 };

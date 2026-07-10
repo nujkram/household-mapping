@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import clientPromise from '$lib/server/mongo';
+import clientPromise, { withTransaction } from '$lib/server/mongo';
 import { householdUpdateSchema, pickSurveyFields, badRequest } from '$lib/server/validation';
 import { encoderMayAccessBarangay } from '$lib/server/clusterAccess';
 import { syncFamilyLinks } from '$lib/server/familyLinks';
@@ -17,14 +17,18 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		const db = await clientPromise();
 		const Household = db.collection('households');
 
-		// A cluster-scoped encoder may only edit households in their cluster —
-		// check both the existing record's barangay and the submitted one.
 		const existing = await Household.findOne(
 			{ _id: data._id },
 			{ projection: { barangayId: 1, parentHouseholdId: 1 } }
 		);
+		if (!existing) {
+			return json({ status: 'Error', error: 'Household not found' }, { status: 404 });
+		}
+
+		// A cluster-scoped encoder may only edit households in their cluster —
+		// check both the existing record's barangay and the submitted one.
 		if (
-			!(await encoderMayAccessBarangay(db, locals.user, existing?.barangayId)) ||
+			!(await encoderMayAccessBarangay(db, locals.user, existing.barangayId)) ||
 			!(await encoderMayAccessBarangay(db, locals.user, data.barangayId))
 		) {
 			return json(
@@ -56,21 +60,36 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		};
 		if (data.tag) set.tag = data.tag;
 
-		const result = await Household.updateOne({ _id: data._id }, { $set: set });
+		// Optimistic concurrency: only write if updatedAt still matches what the
+		// client loaded. Prevents one editor silently clobbering another's save.
+		const filter: Record<string, unknown> = { _id: data._id };
+		if (data.expectedUpdatedAt) filter.updatedAt = new Date(data.expectedUpdatedAt);
 
-		if (result.matchedCount === 0) {
-			return json({ status: 'Error', error: 'Household not found' }, { status: 404 });
+		// The document write and the family-link resync commit all-or-nothing.
+		const conflict = await withTransaction(async (session) => {
+			const opts = session ? { session } : {};
+			const result = await Household.updateOne(filter, { $set: set }, opts);
+			if (result.matchedCount === 0) return true; // version mismatch → abort
+			await syncFamilyLinks(
+				db,
+				data._id,
+				data.dependentDetails,
+				{ latitude: data.latitude, longitude: data.longitude },
+				existing.parentHouseholdId as string | undefined,
+				session
+			);
+			return false;
+		});
+
+		if (conflict) {
+			return json(
+				{
+					status: 'Error',
+					error: 'This household was changed by someone else. Please reload and try again.'
+				},
+				{ status: 409 }
+			);
 		}
-
-		// Multi-family dwellings: keep the family↔dwelling relation in sync with
-		// the dependent links (and share this dwelling's pin with sub-families).
-		await syncFamilyLinks(
-			db,
-			data._id,
-			data.dependentDetails,
-			{ latitude: data.latitude, longitude: data.longitude },
-			existing?.parentHouseholdId
-		);
 
 		return json({ status: 'Success', message: 'Data updated successfully' });
 	} catch (error) {

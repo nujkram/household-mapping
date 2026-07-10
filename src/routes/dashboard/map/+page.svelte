@@ -16,6 +16,8 @@
 	let fetching = false;
 	let capped = false;
 	let visibleCount = 0;
+	// Monotonic request id — a slower older fetch must not overwrite a newer one.
+	let latestSeq = 0;
 
 	// Markers reused across viewport refreshes, keyed by household _id.
 	const markersById = new Map<string, google.maps.Marker>();
@@ -75,18 +77,21 @@
 		if (selectedBarangay) params.set('barangay', selectedBarangay);
 		if (selectedTag) params.set('tag', selectedTag);
 
+		const seq = ++latestSeq;
 		fetching = true;
 		try {
 			const res = await fetch(`/api/admin/household/map?${params}`);
 			const result = await res.json();
+			// Drop this response if a newer fetch has since been issued (fast panning).
+			if (seq !== latestSeq) return;
 			if (!res.ok) throw new Error(result?.error || 'Failed to load households');
 			syncMarkers(result.households || []);
 			capped = Boolean(result.capped);
 			visibleCount = (result.households || []).length;
 		} catch (error) {
-			console.error('Error loading households in view:', error);
+			if (seq === latestSeq) console.error('Error loading households in view:', error);
 		} finally {
-			fetching = false;
+			if (seq === latestSeq) fetching = false;
 		}
 	}
 
@@ -159,6 +164,13 @@
 </svelte:head>
 
 <div class="container mx-auto p-4">
+	{#if data.migrationNeeded}
+		<aside class="card variant-filled-warning p-3 mb-4">
+			Some households aren't showing on the map yet — the location migration hasn't been run.
+			An administrator should run <code class="code">npm run backfill</code> once.
+		</aside>
+	{/if}
+
 	<div class="mb-4 flex flex-wrap gap-4">
 		<label class="sr-only" for="map-search">Search households</label>
 		<input

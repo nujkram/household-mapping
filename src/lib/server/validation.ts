@@ -137,7 +137,10 @@ export const householdUpdateSchema = householdBaseSchema.extend({
 	// CSV-imported households have no coordinates yet; updating them (e.g. to
 	// fix a name or set a tag) must not require a location.
 	latitude: z.string().trim().optional().default(''),
-	longitude: z.string().trim().optional().default('')
+	longitude: z.string().trim().optional().default(''),
+	// Optimistic concurrency: the updatedAt the client loaded. If it no longer
+	// matches, the record was changed by someone else since — reject with 409.
+	expectedUpdatedAt: z.string().optional()
 });
 
 // --- Grant ------------------------------------------------------------------
