@@ -1,16 +1,23 @@
 import type { PageServerLoad } from './$types';
 import clientPromise from '$lib/server/mongo';
+import { scopedClusterFor, barangayIdsInCluster } from '$lib/server/clusterAccess';
 
 export const ssr = false;
 
-export const load: PageServerLoad = async () => {
+export const load: PageServerLoad = async ({ locals }) => {
 	try {
 		const db = await clientPromise();
 		const householdsCollection = db.collection('households');
 		const barangaysCollection = db.collection('barangays');
 
+		// A cluster-scoped encoder only ever sees their cluster on the map.
+		const cluster = scopedClusterFor(locals.user);
+		const clusterBarangayIds = cluster ? await barangayIdsInCluster(db, cluster) : null;
+		const barangayScope = clusterBarangayIds ? { _id: { $in: clusterBarangayIds } } : {};
+		const householdScope = clusterBarangayIds ? { barangayId: { $in: clusterBarangayIds } } : {};
+
 		const barangays = await barangaysCollection
-			.find({ isActive: true }, { projection: { _id: 1, name: 1 } })
+			.find({ isActive: true, ...barangayScope }, { projection: { _id: 1, name: 1 } })
 			.sort({ name: 1 })
 			.toArray();
 
@@ -21,7 +28,8 @@ export const load: PageServerLoad = async () => {
 				{
 					isActive: true,
 					latitude: { $exists: true },
-					longitude: { $exists: true }
+					longitude: { $exists: true },
+					...householdScope
 				},
 				{
 					projection: {
@@ -40,7 +48,7 @@ export const load: PageServerLoad = async () => {
 			.toArray();
 
 		const barangayMap = new Map(
-			barangays.map((b: { _id: string; name: string }) => [b._id, b.name] as [string, string])
+			barangays.map((b: any) => [b._id, b.name] as [string, string])
 		);
 
 		const enhancedHouseholds = households.map((household: any) => ({
