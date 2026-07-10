@@ -7,10 +7,10 @@ export const GET: RequestHandler = async () => {
 	const Barangay = db.collection('barangays');
 
 	// Plain find — no household $lookup. This endpoint feeds dropdowns, the
-	// barangays table, and store refreshes after every form submit; embedding
-	// every household document made all of those pay for data nobody rendered.
-	// (The barangay detail page loads its own households in its page loader.)
-	const response = await Barangay.find({ isActive: true }).sort({ name: 1 }).toArray();
+	// barangays table, and store refreshes after every form submit.
+	// `$ne: false` (not `=== true`) so barangays seeded/imported without an
+	// explicit isActive field still appear — only deactivated ones are hidden.
+	const response = await Barangay.find({ isActive: { $ne: false } }).sort({ name: 1 }).toArray();
 
 	return json({ status: 'Success', response });
 };

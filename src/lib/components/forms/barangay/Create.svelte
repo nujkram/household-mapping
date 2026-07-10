@@ -8,6 +8,8 @@
 	import { CLUSTER_OPTIONS, clusterIdForBarangay, clusterLabel } from '$lib/utils/clusters';
 
 	export let drawerStore: DrawerStore;
+	/** Called after a successful insert so the parent page can refresh its data. */
+	export let onSuccess: (() => void) | undefined = undefined;
 
 	const isFocused = true;
 	let isSubmitting = false;
@@ -91,6 +93,7 @@
 				cluster
 			});
 			await barangayStore.refresh();
+			onSuccess?.();
 
 			showToast(toastStore, result.message, true);
 			drawerStore.close();

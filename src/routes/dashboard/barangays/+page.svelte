@@ -1,11 +1,10 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
+	import { goto, invalidateAll } from '$app/navigation';
 	import TableBarangay from './table-barangay.svelte';
 	import { Drawer, getDrawerStore } from '@skeletonlabs/skeleton';
 	import type { DrawerSettings } from '@skeletonlabs/skeleton';
 	import Create from '$lib/components/forms/barangay/Create.svelte';
 	import Update from '$lib/components/forms/barangay/Update.svelte';
-	import { barangayStore } from '$lib/stores/barangayStore';
 	import { CLUSTER_OPTIONS, clusterLabel, resolveClusterId } from '$lib/utils/clusters';
 	import type { Barangay } from '$lib/utils/types';
 	export let data: any;
@@ -15,8 +14,10 @@
 	let selectedCluster = '';
 	let selectedItem: Barangay;
 
-	// Filter by name/captain and by resolved cluster (stored field or name config).
-	$: filteredBarangays = $barangayStore.filter((b) => {
+	// Derive straight from the loader data (populated at first render). Reading a
+	// store that's set in a separate reactive statement left the first paint empty.
+	$: barangays = (data?.barangays ?? []) as Barangay[];
+	$: filteredBarangays = barangays.filter((b) => {
 		const term = keyword.trim().toLowerCase();
 		const matchesSearch =
 			!term ||
@@ -25,6 +26,8 @@
 		const matchesCluster = !selectedCluster || resolveClusterId(b) === selectedCluster;
 		return matchesSearch && matchesCluster;
 	});
+
+	const refresh = () => invalidateAll();
 
 	// drawer settings
 	const drawerCreate: DrawerSettings = {
@@ -58,7 +61,6 @@
 	drawerStore.close();
 
 	$: isReady = data !== undefined;
-	$: if (data?.barangays) barangayStore.set(data.barangays);
 </script>
 
 <div class="card mb-4">
@@ -116,8 +118,8 @@
 
 <Drawer>
 	{#if $drawerStore.id === 'create'}
-		<Create {drawerStore} />
+		<Create {drawerStore} onSuccess={refresh} />
 	{:else if $drawerStore.id === 'update'}
-		<Update data={selectedItem} {drawerStore} />
+		<Update data={selectedItem} {drawerStore} onSuccess={refresh} />
 	{/if}
 </Drawer>
