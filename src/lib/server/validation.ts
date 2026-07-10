@@ -229,7 +229,9 @@ export const userUpdateSchema = z.object({
 	lastName: nameField,
 	phone,
 	role: roleField,
-	cluster: clusterField
+	cluster: clusterField,
+	// Whether the account can log in. Defaults to active if omitted.
+	isActive: z.coerce.boolean().optional().default(true)
 });
 
 export const resetPasswordSchema = z.object({

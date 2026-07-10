@@ -11,6 +11,8 @@
 	export let id: string;
 	// Default so the bound <select> has a value even for legacy users.
 	if (user && user.cluster == null) user.cluster = '';
+	// Legacy users may not have isActive; treat missing as active.
+	if (user && user.isActive == null) user.isActive = true;
 	let isFocused: boolean = true;
 	let isSubmitting = false;
 
@@ -37,7 +39,8 @@
 				firstName: user?.firstName,
 				phone: user?.phone,
 				role: user?.role,
-				cluster: user?.cluster || ''
+				cluster: user?.cluster || '',
+				isActive: user?.isActive
 			});
 
 			toastSettings.message = result.message;
@@ -108,6 +111,17 @@
 			bind:value={user.phone}
 			required
 		/>
+	</label>
+
+	<hr class="mt-4" />
+	<label class="label mt-4 flex items-center gap-3">
+		<input class="checkbox" type="checkbox" bind:checked={user.isActive} />
+		<span>
+			Account active
+			<span class="block text-xs opacity-60">
+				Uncheck to disable login and end this user's sessions immediately.
+			</span>
+		</span>
 	</label>
 
 	<div class="flex gap-4 place-content-end w-full">

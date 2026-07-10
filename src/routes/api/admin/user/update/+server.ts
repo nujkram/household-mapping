@@ -10,6 +10,14 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	if (!parsed.success) return badRequest(parsed.error);
 	const data = parsed.data;
 
+	// Prevent locking yourself out.
+	if (data._id === locals.user._id && data.isActive === false) {
+		return json(
+			{ status: 'Error', error: 'You cannot deactivate your own account.' },
+			{ status: 400 }
+		);
+	}
+
 	const db = await clientPromise();
 	const User = db.collection('users');
 
@@ -22,7 +30,8 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				firstName: data.firstName,
 				lastName: data.lastName,
 				phone: data.phone,
-				isActive: true,
+				// Admin-controlled; deactivating cuts login + existing sessions.
+				isActive: data.isActive,
 				// Validated against the role whitelist by userUpdateSchema.
 				role: data.role,
 				// Cluster scoping only applies to encoders.

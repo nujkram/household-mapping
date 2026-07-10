@@ -58,7 +58,11 @@ export const handle: Handle = async ({ event, resolve }) => {
 		// Look up by the HASH of the cookie value — the raw token never touches the DB.
 		// Never load `services` (password hash + tokens) into locals.
 		const user = await Users.findOne(
-			{ 'services.resume.loginTokens.hashedToken': hashSessionToken(session) },
+			{
+				'services.resume.loginTokens.hashedToken': hashSessionToken(session),
+				// A deactivated account's existing sessions stop working immediately.
+				isActive: { $ne: false }
+			},
 			{ projection: { services: 0 } }
 		);
 		if (user) {
