@@ -6,12 +6,25 @@
 	import Create from '$lib/components/forms/barangay/Create.svelte';
 	import Update from '$lib/components/forms/barangay/Update.svelte';
 	import { barangayStore } from '$lib/stores/barangayStore';
+	import { CLUSTER_OPTIONS, clusterLabel, resolveClusterId } from '$lib/utils/clusters';
 	import type { Barangay } from '$lib/utils/types';
 	export let data: any;
 
 	let isReady: boolean;
-	let keyword: string;
+	let keyword = '';
+	let selectedCluster = '';
 	let selectedItem: Barangay;
+
+	// Filter by name/captain and by resolved cluster (stored field or name config).
+	$: filteredBarangays = $barangayStore.filter((b) => {
+		const term = keyword.trim().toLowerCase();
+		const matchesSearch =
+			!term ||
+			(b.name?.toLowerCase() || '').includes(term) ||
+			(b.fullName?.toLowerCase() || '').includes(term);
+		const matchesCluster = !selectedCluster || resolveClusterId(b) === selectedCluster;
+		return matchesSearch && matchesCluster;
+	});
 
 	// drawer settings
 	const drawerCreate: DrawerSettings = {
@@ -58,18 +71,28 @@
 			<div class="placeholder animate-pulse w-full" />
 		</section>
 	{:else}
-		<section class="flex p-4 w-full gap-4">
+		<section class="flex flex-wrap p-4 w-full gap-4 items-center">
 			<button class="btn variant-filled-primary" on:click={() => drawerStore.open(drawerCreate)}
 				>Add Barangay</button
 			>
-			<input class="input ml-auto" type="text" placeholder="Search" bind:value={keyword} />
+			<select class="select w-auto ml-auto" bind:value={selectedCluster}>
+				<option value="">All Clusters</option>
+				{#each CLUSTER_OPTIONS as c}
+					<option value={c.value}>{c.label}</option>
+				{/each}
+			</select>
+			<input class="input w-auto" type="text" placeholder="Search" bind:value={keyword} />
 		</section>
+		{#if selectedCluster}
+			<p class="px-4 pb-2 text-sm opacity-60">
+				Showing {filteredBarangays.length} barangay{filteredBarangays.length === 1 ? '' : 's'} in
+				{clusterLabel(selectedCluster)}.
+			</p>
+		{/if}
 	{/if}
 </div>
 {#if isReady}
-	{#key $barangayStore}
-		<TableBarangay data={$barangayStore} {handleClickView} {handleClickUpdate} />
-	{/key}
+	<TableBarangay data={filteredBarangays} {handleClickView} {handleClickUpdate} />
 {:else}
 	<table class="table">
 		<thead>

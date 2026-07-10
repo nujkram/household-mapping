@@ -5,6 +5,7 @@
 	import { submitJson } from '$lib/utils/apiHelper';
 	import { barangayStore } from '$lib/stores/barangayStore';
 	import { loadGoogleMaps } from '$lib/utils/googleMaps';
+	import { CLUSTER_OPTIONS, clusterIdForBarangay, clusterLabel } from '$lib/utils/clusters';
 
 	export let drawerStore: DrawerStore;
 
@@ -17,6 +18,9 @@
 	let phone: string;
 	let latitude: string;
 	let longitude: string;
+	let cluster = '';
+	// What the name-based config would assign (shown as the "Auto" hint).
+	$: autoCluster = clusterIdForBarangay(name);
 
 	let map: google.maps.Map;
 	let marker: google.maps.marker.AdvancedMarkerElement;
@@ -83,7 +87,8 @@
 				firstName,
 				phone,
 				latitude,
-				longitude
+				longitude,
+				cluster
 			});
 			await barangayStore.refresh();
 
@@ -169,6 +174,18 @@
 			bind:value={phone}
 			required
 		/>
+	</label>
+
+	<label class="label">
+		<span>Cluster</span>
+		<select class="select" bind:value={cluster}>
+			<option value="">
+				Auto{autoCluster ? ` — ${clusterLabel(autoCluster)}` : ' (unassigned)'}
+			</option>
+			{#each CLUSTER_OPTIONS as c}
+				<option value={c.value}>{c.label}</option>
+			{/each}
+		</select>
 	</label>
 
 	<label class="hidden label">

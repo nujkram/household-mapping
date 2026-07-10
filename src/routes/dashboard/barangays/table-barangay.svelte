@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { Barangay } from '$lib/utils/types';
-	import { clusterLabel, clusterIdForBarangay } from '$lib/utils/clusters';
+	import { clusterLabel, resolveClusterId } from '$lib/utils/clusters';
 	export let data: Barangay[];
 	export let handleClickView: (item: Barangay) => void;
 	export let handleClickUpdate: (item: Barangay) => void;
@@ -27,8 +27,8 @@
 				<tr>
 					<td>{item.name}</td>
 					<td>
-						{#if clusterIdForBarangay(item.name)}
-							<span class="badge variant-soft">{clusterLabel(clusterIdForBarangay(item.name))}</span>
+						{#if resolveClusterId(item)}
+							<span class="badge variant-soft">{clusterLabel(resolveClusterId(item))}</span>
 						{:else}
 							<span class="opacity-40">—</span>
 						{/if}

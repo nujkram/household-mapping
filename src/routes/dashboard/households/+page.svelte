@@ -13,7 +13,7 @@
 	import { debounce } from '$lib/utils/debounce';
 	import { canEditHouseholds, canManageGrants } from '$lib/utils/roles';
 	import { getTagConfig } from '$lib/utils/tagHelper';
-	import { CLUSTER_OPTIONS, clusterLabel, clusterIdForBarangay } from '$lib/utils/clusters';
+	import { CLUSTER_OPTIONS, clusterLabel, resolveClusterId } from '$lib/utils/clusters';
 
 	interface PageData {
 		households: Household[];
@@ -53,7 +53,7 @@
 	// Barangay dropdown narrows to the chosen cluster (data.barangays is already
 	// limited to a locked encoder's cluster server-side).
 	$: barangayChoices = selectedCluster
-		? data.barangays.filter((b) => clusterIdForBarangay(b.name) === selectedCluster)
+		? data.barangays.filter((b) => resolveClusterId(b) === selectedCluster)
 		: data.barangays;
 
 	const onClusterChange = () => {

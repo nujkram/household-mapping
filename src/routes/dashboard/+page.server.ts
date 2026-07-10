@@ -2,7 +2,7 @@ import { redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 import type { Barangay, SessionUser } from '$lib/utils/types';
 import { ROLES } from '$lib/utils/roles';
-import { CLUSTERS, clusterIdForBarangay } from '$lib/utils/clusters';
+import { CLUSTERS, resolveClusterId } from '$lib/utils/clusters';
 import clientPromise from '$lib/server/mongo';
 
 type HouseholdDocument = {
@@ -126,9 +126,13 @@ export const load: PageServerLoad = async ({ locals }) => {
 
 	// Households per barangay, segmented by tag — top 10 plus an "Other" bucket.
 	const barangayNames = new Map(barangays.map((b: any) => [b._id, b.name] as [string, string]));
+	// barangayId -> resolved cluster (stored field wins, name config fallback).
+	const barangayClusters = new Map<string, string | null>(
+		barangays.map((b: any) => [b._id, resolveClusterId(b)] as [string, string | null])
+	);
 	const perBarangay = new Map<
 		string,
-		{ name: string; APIN: number; KONTRA: number; UNTAGGED: number; total: number }
+		{ name: string; clusterId: string | null; APIN: number; KONTRA: number; UNTAGGED: number; total: number }
 	>();
 	for (const g of (facet.perBarangayTag ?? []) as {
 		_id: { barangayId: string; tag: string };
@@ -139,6 +143,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 			perBarangay.get(key) ??
 			({
 				name: barangayNames.get(key) || 'Unknown',
+				clusterId: barangayClusters.get(key) ?? null,
 				APIN: 0,
 				KONTRA: 0,
 				UNTAGGED: 0,
@@ -157,12 +162,13 @@ export const load: PageServerLoad = async ({ locals }) => {
 			rest.reduce(
 				(acc, r) => ({
 					name: `Other (${rest.length} barangays)`,
+					clusterId: null,
 					APIN: acc.APIN + r.APIN,
 					KONTRA: acc.KONTRA + r.KONTRA,
 					UNTAGGED: acc.UNTAGGED + r.UNTAGGED,
 					total: acc.total + r.total
 				}),
-				{ name: '', APIN: 0, KONTRA: 0, UNTAGGED: 0, total: 0 }
+				{ name: '', clusterId: null as string | null, APIN: 0, KONTRA: 0, UNTAGGED: 0, total: 0 }
 			)
 		);
 	}
@@ -192,7 +198,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 	for (const c of CLUSTERS) clusterAgg.set(c.id, { APIN: 0, KONTRA: 0, UNTAGGED: 0 });
 	clusterAgg.set('UNASSIGNED', { APIN: 0, KONTRA: 0, UNTAGGED: 0 });
 	for (const row of barangayRows) {
-		const cid = clusterIdForBarangay(row.name) ?? 'UNASSIGNED';
+		const cid = row.clusterId ?? 'UNASSIGNED';
 		const bucket = clusterAgg.get(cid)!;
 		bucket.APIN += row.APIN;
 		bucket.KONTRA += row.KONTRA;

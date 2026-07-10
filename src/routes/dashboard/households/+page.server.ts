@@ -1,7 +1,7 @@
 import type { PageServerLoad } from './$types';
 import clientPromise from '$lib/server/mongo';
 import { scopedClusterFor } from '$lib/server/clusterAccess';
-import { clusterIdForBarangay, isClusterId } from '$lib/utils/clusters';
+import { resolveClusterId, isClusterId } from '$lib/utils/clusters';
 
 const DEFAULT_LIMIT = 20;
 
@@ -33,20 +33,21 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 		const allBarangays = await barangaysCollection
 			.find(
 				{ isActive: true },
-				// latitude/longitude are needed by the Create/Update drawer maps.
-				{ projection: { _id: 1, name: 1, latitude: 1, longitude: 1 } }
+				// latitude/longitude drive the Create/Update drawer maps; cluster
+				// (with name fallback) drives cluster filtering.
+				{ projection: { _id: 1, name: 1, latitude: 1, longitude: 1, cluster: 1 } }
 			)
 			.sort({ name: 1 })
 			.toArray();
 
 		// Barangay ids belonging to the active cluster (if any).
 		const clusterBarangayIds = cluster
-			? allBarangays.filter((b: any) => clusterIdForBarangay(b.name) === cluster).map((b: any) => b._id)
+			? allBarangays.filter((b: any) => resolveClusterId(b) === cluster).map((b: any) => b._id)
 			: null;
 
 		// A scoped encoder only ever sees their cluster's barangays in dropdowns.
 		const barangays = lockedCluster
-			? allBarangays.filter((b: any) => clusterIdForBarangay(b.name) === lockedCluster)
+			? allBarangays.filter((b: any) => resolveClusterId(b) === lockedCluster)
 			: allBarangays;
 
 		// Build the query — the DB does filtering/sorting/pagination.

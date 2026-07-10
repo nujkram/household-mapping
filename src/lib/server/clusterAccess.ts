@@ -9,15 +9,27 @@ export const scopedClusterFor = (user: SessionUser | null): string | null => {
 	return null;
 };
 
-/** Barangay _ids whose (uppercased) name is in the given cluster. */
+/**
+ * Barangay _ids in the given cluster. A stored `cluster` field wins; barangays
+ * without one fall back to the fixed name-based config (mirrors resolveClusterId).
+ */
 export const barangayIdsInCluster = async (db: Db, clusterId: string): Promise<string[]> => {
 	const names = barangayNamesInCluster(clusterId);
-	if (names.length === 0) return [];
+	const noStoredCluster = { $or: [{ cluster: { $exists: false } }, { cluster: null }, { cluster: '' }] };
 	const rows = await db
 		.collection('barangays')
 		.aggregate([
 			{ $addFields: { _nameUpper: { $toUpper: { $trim: { input: '$name' } } } } },
-			{ $match: { _nameUpper: { $in: names } } },
+			{
+				$match: {
+					$or: [
+						// explicit override to this cluster
+						{ cluster: clusterId },
+						// or no override + name matches the config
+						{ $and: [noStoredCluster, { _nameUpper: { $in: names } }] }
+					]
+				}
+			},
 			{ $project: { _id: 1 } }
 		])
 		.toArray();

@@ -27,6 +27,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		phone: data.phone,
 		latitude: data.latitude,
 		longitude: data.longitude,
+		cluster: data.cluster,
 		isActive: true,
 		createdAt: now,
 		updatedAt: now,

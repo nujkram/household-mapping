@@ -8,6 +8,8 @@ export type Barangay = {
 	phone: string;
 	latitude: string;
 	longitude: string;
+	/** Explicit cluster override; '' = derive from the fixed name-based config. */
+	cluster?: string;
 	households?: Household[];
 };
 

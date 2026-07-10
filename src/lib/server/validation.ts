@@ -19,7 +19,9 @@ export const barangayInsertSchema = z.object({
 	lastName: nameField,
 	phone,
 	latitude: coordinate,
-	longitude: coordinate
+	longitude: coordinate,
+	// '' = derive from the fixed name-based config.
+	cluster: z.enum(['CLUSTER_1', 'CLUSTER_2', 'CLUSTER_3']).or(z.literal('')).optional().default('')
 });
 
 export const barangayUpdateSchema = barangayInsertSchema.extend({

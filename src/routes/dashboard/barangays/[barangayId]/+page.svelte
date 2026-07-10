@@ -10,7 +10,7 @@
 	import TableHousehold from './table-household.svelte';
 	import type { Household } from '$lib/utils/types';
 	import { goto, invalidateAll } from '$app/navigation';
-	import { clusterLabel, clusterIdForBarangay } from '$lib/utils/clusters';
+	import { clusterLabel, resolveClusterId } from '$lib/utils/clusters';
 
 	export let data;
 
@@ -134,7 +134,7 @@
 					</div>
 					<div>
 						<span class="font-bold">Cluster:</span>
-						<span>{clusterLabel(clusterIdForBarangay(barangayDetail?.name)) || 'Unassigned'}</span>
+						<span>{clusterLabel(resolveClusterId(barangayDetail)) || 'Unassigned'}</span>
 					</div>
 					<div>
 						<span class="font-bold">Coordinates:</span>

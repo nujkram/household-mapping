@@ -69,3 +69,15 @@ export const barangayNamesInCluster = (id: string | null | undefined): string[] 
 
 export const isClusterId = (id: string | null | undefined): boolean =>
 	CLUSTERS.some((c) => c.id === id);
+
+/**
+ * The cluster for a barangay record: an explicitly stored `cluster` field wins;
+ * otherwise fall back to the fixed name-based config. This lets admins override
+ * per-barangay while un-edited barangays stay correctly clustered.
+ */
+export const resolveClusterId = (
+	barangay: { cluster?: string | null; name?: string | null } | null | undefined
+): string | null => {
+	if (barangay?.cluster && isClusterId(barangay.cluster)) return barangay.cluster;
+	return clusterIdForBarangay(barangay?.name);
+};

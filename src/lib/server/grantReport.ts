@@ -1,6 +1,6 @@
 import type { Db } from 'mongodb';
 import { barangayIdsInCluster } from '$lib/server/clusterAccess';
-import { clusterIdForBarangay, clusterLabel, isClusterId } from '$lib/utils/clusters';
+import { resolveClusterId, clusterLabel, isClusterId } from '$lib/utils/clusters';
 
 export type GrantRecipient = {
 	_id: string;
@@ -67,7 +67,7 @@ export const fetchGrantRecipients = async (
 					localField: 'barangayId',
 					foreignField: '_id',
 					as: 'barangay',
-					pipeline: [{ $project: { name: 1 } }]
+					pipeline: [{ $project: { name: 1, cluster: 1 } }]
 				}
 			},
 			{
@@ -86,6 +86,7 @@ export const fetchGrantRecipients = async (
 					phone: 1,
 					barangayId: 1,
 					barangayName: { $ifNull: [{ $arrayElemAt: ['$barangay.name', 0] }, 'Unknown'] },
+					barangayCluster: { $arrayElemAt: ['$barangay.cluster', 0] },
 					receivedAt: '$award.receivedAt',
 					grantedByName: { $ifNull: [{ $arrayElemAt: ['$grantedByUser.fullName', 0] }, ''] }
 				}
@@ -97,6 +98,7 @@ export const fetchGrantRecipients = async (
 
 	return rows.map((r: any) => ({
 		...r,
-		cluster: clusterLabel(clusterIdForBarangay(r.barangayName)) || '—'
+		cluster:
+			clusterLabel(resolveClusterId({ cluster: r.barangayCluster, name: r.barangayName })) || '—'
 	})) as GrantRecipient[];
 };

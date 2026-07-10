@@ -6,12 +6,16 @@
 	import type { Barangay } from '$lib/utils/types';
 	import { barangayStore } from '$lib/stores/barangayStore';
 	import { loadGoogleMaps } from '$lib/utils/googleMaps';
+	import { CLUSTER_OPTIONS, clusterIdForBarangay, clusterLabel } from '$lib/utils/clusters';
 
 	export let drawerStore: DrawerStore;
 	export let data: Barangay;
 	/** Called after a successful update so the parent page can refresh its data. */
 	export let onSuccess: (() => void) | undefined = undefined;
 	const isFocused: boolean = true;
+	let cluster = data.cluster ?? '';
+	// What the name-based config would assign if left on Auto.
+	$: autoCluster = clusterIdForBarangay(data.name);
 	let isSubmitting = false;
 
 	let map: google.maps.Map;
@@ -106,12 +110,14 @@
 				firstName: data.firstName,
 				phone: data.phone,
 				latitude: data.latitude,
-				longitude: data.longitude
+				longitude: data.longitude,
+				cluster
 			});
 
 			// Update the store immediately with the new data
 			barangayStore.edit({
 				...data,
+				cluster,
 				fullName: `${data.firstName} ${data.middleName} ${data.lastName}`
 			});
 
@@ -201,6 +207,18 @@
 			bind:value={data.phone}
 			required
 		/>
+	</label>
+
+	<label class="label">
+		<span>Cluster</span>
+		<select class="select" bind:value={cluster}>
+			<option value="">
+				Auto{autoCluster ? ` — ${clusterLabel(autoCluster)}` : ' (unassigned)'}
+			</option>
+			{#each CLUSTER_OPTIONS as c}
+				<option value={c.value}>{c.label}</option>
+			{/each}
+		</select>
 	</label>
 
 	<label class="hidden label">
