@@ -65,12 +65,33 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		const Household = db.collection('households');
 		const userId = locals.user._id;
 
+		// Reject orphan imports: the barangay must exist.
+		const barangay = await db
+			.collection('barangays')
+			.findOne({ _id: barangayId }, { projection: { _id: 1 } });
+		if (!barangay) {
+			return json({ status: 'Error', error: 'Selected barangay does not exist' }, { status: 400 });
+		}
+
+		// Idempotent re-import: skip rows already present for this barangay
+		// (keyed on name + precinct + VIN). Also dedups within the file itself.
+		const existing = await Household.find(
+			{ barangayId },
+			{ projection: { fullName: 1, precinct: 1, vin: 1 } }
+		).toArray();
+		const dedupeKey = (fullName: string, precinct: string, vin: string) =>
+			`${fullName}|${precinct}|${vin}`;
+		const seen = new Set(
+			existing.map((h: any) => dedupeKey(h.fullName || '', h.precinct || '', h.vin || ''))
+		);
+
 		const fileStream = Readable.from(Buffer.from(await file.arrayBuffer()));
 		const parser = fileStream.pipe(csv({ headers: false, skipLines: 0 }));
 
 		let batch: Record<string, unknown>[] = [];
 		let inserted = 0;
 		let skipped = 0;
+		let duplicates = 0;
 		let failed = 0;
 
 		const flush = async () => {
@@ -100,19 +121,40 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				continue;
 			}
 
+			const precinct = data[0] || '';
+			const vin = data[6] || '';
+			const fullName = `${firstName} ${middleName} ${lastName}`
+				.replace(/\s+/g, ' ')
+				.toUpperCase()
+				.trim();
+
+			// Skip already-imported / in-file duplicates.
+			const key = dedupeKey(fullName, precinct, vin);
+			if (seen.has(key)) {
+				duplicates++;
+				continue;
+			}
+			seen.add(key);
+
 			batch.push({
 				_id: id(),
 				barangayId,
-				precinct: data[0] || '',
+				precinct,
 				lastName: lastName.toUpperCase(),
 				firstName: firstName.toUpperCase(),
 				middleName: middleName.toUpperCase(),
-				fullName: `${firstName} ${middleName} ${lastName}`.replace(/\s+/g, ' ').toUpperCase().trim(),
+				fullName,
 				address: data[3] || '',
 				disability: data[4] || '',
 				dateOfBirth: null,
-				vin: data[6] || '',
+				vin,
 				isVoter: true,
+				// Defaults so imported rows aren't partial docs (match form-created shape).
+				tag: 'UNTAGGED',
+				dependents: 0,
+				dependentDetails: [],
+				grants: [],
+				parentHouseholdId: '',
 				createdAt: now,
 				updatedAt: now,
 				createdBy: userId,
@@ -125,15 +167,22 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		await flush();
 
 		if (inserted === 0) {
-			return json({ status: 'Error', error: 'No valid records to insert' }, { status: 400 });
+			const reason =
+				duplicates > 0
+					? 'All rows were already imported for this barangay.'
+					: 'No valid records to insert.';
+			return json({ status: 'Error', error: reason, duplicates, skipped }, { status: 400 });
 		}
 
+		const notes = [
+			skipped ? `${skipped} skipped` : '',
+			duplicates ? `${duplicates} already imported` : '',
+			failed ? `${failed} failed` : ''
+		].filter(Boolean);
 		let message = `Successfully uploaded ${inserted} households in ${barangayName}`;
-		if (skipped || failed) {
-			message += ` (${skipped} skipped, ${failed} failed)`;
-		}
+		if (notes.length) message += ` (${notes.join(', ')})`;
 
-		return json({ status: 'Success', message, inserted, skipped, failed });
+		return json({ status: 'Success', message, inserted, skipped, duplicates, failed });
 	} catch (error) {
 		console.error('Upload error:', error);
 		return json({ status: 'Error', error: 'Failed to process upload' }, { status: 500 });

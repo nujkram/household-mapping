@@ -29,24 +29,35 @@ if (dev && uri?.includes('Test')) {
 const ensureIndexes = async (db: Db): Promise<void> => {
 	if (indexesEnsured) return;
 	indexesEnsured = true;
-	try {
-		await Promise.all([
-			db.collection('users').createIndex({ 'services.resume.loginTokens.hashedToken': 1 }),
-			db.collection('users').createIndex({ username: 1 }),
-			db.collection('households').createIndex({ barangayId: 1 }),
-			db.collection('households').createIndex({ isActive: 1 }),
-			db.collection('households').createIndex({ 'dependentDetails.linkedHouseholdId': 1 }),
-			db.collection('households').createIndex({ 'grants.grantId': 1 }),
-			db.collection('households').createIndex({ parentHouseholdId: 1 }),
-			db.collection('grants').createIndex({ name: 1, year: 1 }),
-			db.collection('services').createIndex({ dateReceived: -1 }),
-			db.collection('barangays').createIndex({ isActive: 1, name: 1 })
-		]);
-	} catch (error) {
-		// Don't take the app down if index creation fails (e.g. read-only user).
-		indexesEnsured = false;
-		console.error('Failed to ensure MongoDB indexes:', error);
-	}
+
+	// Each index is created independently so one failure (e.g. a UNIQUE index
+	// that can't build because pre-existing duplicates exist) doesn't block the
+	// rest. A failed unique index just means uniqueness isn't enforced yet —
+	// logged loudly so the dupes can be cleaned up and the app is redeployed.
+	const specs: [string, Record<string, 1 | -1>, { unique?: boolean }?][] = [
+		['users', { 'services.resume.loginTokens.hashedToken': 1 }],
+		['users', { username: 1 }, { unique: true }],
+		['households', { barangayId: 1 }],
+		['households', { isActive: 1 }],
+		['households', { 'dependentDetails.linkedHouseholdId': 1 }],
+		['households', { 'grants.grantId': 1 }],
+		['households', { parentHouseholdId: 1 }],
+		['grants', { name: 1, year: 1 }, { unique: true }],
+		['services', { dateReceived: -1 }],
+		['barangays', { isActive: 1, name: 1 }]
+	];
+
+	await Promise.all(
+		specs.map(([coll, keys, opts]) =>
+			db
+				.collection(coll)
+				.createIndex(keys, opts ?? {})
+				.catch((error) => {
+					indexesEnsured = false; // allow a retry on the next cold start
+					console.error(`Failed to create index on ${coll} ${JSON.stringify(keys)}:`, error?.message);
+				})
+		)
+	);
 };
 
 const connectToDatabase = async (): Promise<Db> => {

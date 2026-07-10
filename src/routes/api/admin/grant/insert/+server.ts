@@ -27,17 +27,28 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	}
 
 	const now = new Date();
-	await Grant.insertOne({
-		_id: id(),
-		name: data.name,
-		year: data.year,
-		releasedDate: data.releasedDate,
-		isActive: true,
-		createdAt: now,
-		updatedAt: now,
-		createdBy: locals.user._id,
-		updatedBy: locals.user._id
-	});
+	try {
+		await Grant.insertOne({
+			_id: id(),
+			name: data.name,
+			year: data.year,
+			releasedDate: data.releasedDate,
+			isActive: true,
+			createdAt: now,
+			updatedAt: now,
+			createdBy: locals.user._id,
+			updatedBy: locals.user._id
+		});
+	} catch (error) {
+		// Unique index race on {name, year}.
+		if ((error as { code?: number })?.code === 11000) {
+			return json(
+				{ status: 'Error', error: `A grant named "${data.name}" already exists for ${data.year}` },
+				{ status: 409 }
+			);
+		}
+		throw error;
+	}
 
 	return json({ status: 'Success', message: 'Grant created successfully' });
 };

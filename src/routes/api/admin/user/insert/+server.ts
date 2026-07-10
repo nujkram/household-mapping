@@ -47,6 +47,14 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		updatedBy: locals.user._id
 	};
 
-	await User.insertOne(user);
+	try {
+		await User.insertOne(user);
+	} catch (error) {
+		// Unique index race (two concurrent inserts of the same username).
+		if ((error as { code?: number })?.code === 11000) {
+			return json({ status: 'Error', error: 'Username already exists' }, { status: 409 });
+		}
+		throw error;
+	}
 	return json({ status: 'Success', message: 'Data inserted successfully' });
 };

@@ -32,19 +32,6 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			);
 		}
 
-		// Propagate the new coordinates to every household that links this one as a
-		// dependent — in a single updateMany with array filters (was an N+1 loop).
-		await Household.updateMany(
-			{ 'dependentDetails.linkedHouseholdId': data._id },
-			{
-				$set: {
-					'dependentDetails.$[elem].latitude': data.latitude,
-					'dependentDetails.$[elem].longitude': data.longitude
-				}
-			},
-			{ arrayFilters: [{ 'elem.linkedHouseholdId': data._id }] }
-		);
-
 		const set: Record<string, unknown> = {
 			updatedAt: new Date(),
 			lastName: data.lastName,
