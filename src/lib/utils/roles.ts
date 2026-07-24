@@ -12,9 +12,13 @@ export const ROLE_LABELS: Record<Role, string> = {
 	GRANT_OFFICER: 'Grant Officer'
 };
 
-/** Encoders (and admins) tag households and edit details/location/dependents. */
+/** Encoders (and admins) edit household details/location/dependents. */
 export const canEditHouseholds = (role: string | undefined | null): boolean =>
 	role === ROLES.ADMINISTRATOR || role === ROLES.ENCODER;
+
+/** Only administrators may set the political tag (APIN/KONTRA/UNTAGGED). */
+export const canTagHouseholds = (role: string | undefined | null): boolean =>
+	role === ROLES.ADMINISTRATOR;
 
 /** Grant officers (and admins) manage the grant catalog and award grants. */
 export const canManageGrants = (role: string | undefined | null): boolean =>

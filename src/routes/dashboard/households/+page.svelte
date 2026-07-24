@@ -11,8 +11,7 @@
 	import ServiceCreate from '$lib/components/forms/service/Create.svelte';
 	import TableSkeleton from '$lib/components/common/TableSkeleton.svelte';
 	import { debounce } from '$lib/utils/debounce';
-	import { canEditHouseholds, canManageGrants } from '$lib/utils/roles';
-	import { getTagConfig } from '$lib/utils/tagHelper';
+	import { canEditHouseholds, canManageGrants, canTagHouseholds } from '$lib/utils/roles';
 	import { CLUSTER_OPTIONS, clusterLabel, resolveClusterId } from '$lib/utils/clusters';
 	import { formatCentavos } from '$lib/utils/money';
 
@@ -68,10 +67,15 @@
 		applyFilters();
 	};
 
-	// Role-based capabilities (Encoder edits/tags; Grant Officer awards grants).
+	// Role-based capabilities. Encoders edit household data but only admins set
+	// the political tag; Grant Officers award grants/services.
 	$: userRole = $page.data.user?.role;
 	$: canEdit = canEditHouseholds(userRole);
+	$: canTag = canTagHouseholds(userRole);
 	$: canGrant = canManageGrants(userRole);
+	// Column count for skeleton/empty colspans: Name, Barangay, Phone, Last
+	// Updated, Actions (5) + Tag (admin) + Grants & Services (grant managers).
+	$: colCount = 5 + (canTag ? 1 : 0) + (canGrant ? 2 : 0);
 
 	// Selected household for updates / grant awards
 	let selectedHousehold: Household | undefined;
@@ -271,12 +275,14 @@
 				{/each}
 			</select>
 
-			<select bind:value={selectedTag} on:change={() => applyFilters()} class="select">
-				<option value="">All Tags</option>
-				<option value="APIN">APIN</option>
-				<option value="KONTRA">KONTRA</option>
-				<option value="UNTAGGED">UNTAGGED</option>
-			</select>
+			{#if canTag}
+				<select bind:value={selectedTag} on:change={() => applyFilters()} class="select">
+					<option value="">All Tags</option>
+					<option value="APIN">APIN</option>
+					<option value="KONTRA">KONTRA</option>
+					<option value="UNTAGGED">UNTAGGED</option>
+				</select>
+			{/if}
 
 			<div class="flex gap-2">
 				<select
@@ -306,7 +312,9 @@
 						<th>Name</th>
 						<th>Barangay</th>
 						<th>Phone</th>
-						<th>Tag</th>
+						{#if canTag}
+							<th>Tag</th>
+						{/if}
 						{#if canGrant}
 							<th>Grants</th>
 							<th>Services</th>
@@ -317,10 +325,10 @@
 				</thead>
 				<tbody>
 					{#if $navigating}
-						<TableSkeleton rows={6} cols={canGrant ? 8 : 6} />
+						<TableSkeleton rows={6} cols={colCount} />
 					{:else if data.households.length === 0}
 						<tr>
-							<td colspan={canGrant ? 8 : 6} class="text-center py-8 opacity-60">
+							<td colspan={colCount} class="text-center py-8 opacity-60">
 								{#if !hasFilters && data.total === 0}
 									No households yet. Click “Add Household” to create one.
 								{:else}
@@ -354,8 +362,8 @@
 								</td>
 								<td>{household.barangayName}</td>
 								<td>{household.phone || '-'}</td>
-								<td>
-									{#if canEdit}
+								{#if canTag}
+									<td>
 										<div class="dropdown">
 											<button
 												type="button"
@@ -408,18 +416,8 @@
 												</div>
 											{/if}
 										</div>
-									{:else}
-										<!-- Read-only color dot only: green APIN / red KONTRA / grey UNTAGGED.
-										     Label is in the title attr for accessibility, not shown. -->
-										<span
-											class="inline-block w-5 h-5 rounded-full {getTagConfig(household.tag)
-												.swatchClass}"
-											title={getTagConfig(household.tag).label}
-											role="img"
-											aria-label={getTagConfig(household.tag).label}
-										></span>
-									{/if}
-								</td>
+									</td>
+								{/if}
 								{#if canGrant}
 									<td>
 										{#if household.grants?.length}

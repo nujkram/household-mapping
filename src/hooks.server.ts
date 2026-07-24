@@ -25,7 +25,7 @@ const ROUTE_ROLES: [prefix: string, roles: Role[]][] = [
 	['/api/admin/barangay/insert', ADMIN_ONLY],
 	['/api/admin/barangay/update', ADMIN_ONLY],
 	['/api/admin/household/grant', GRANT_MANAGERS],
-	['/api/admin/household/set-tag', HOUSEHOLD_EDITORS],
+	['/api/admin/household/set-tag', ADMIN_ONLY],
 	['/api/admin/household/insert', HOUSEHOLD_EDITORS],
 	['/api/admin/household/update', HOUSEHOLD_EDITORS],
 	['/api/admin/household/list', HOUSEHOLD_EDITORS],

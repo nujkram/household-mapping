@@ -52,7 +52,6 @@
 	const isAdminView = user.role === ROLES.ADMINISTRATOR;
 	const isEncoderView = user.role === ROLES.ENCODER;
 	const isGrantOfficerView = user.role === ROLES.GRANT_OFFICER;
-	const totalHouseholds = tagCounts.APIN + tagCounts.KONTRA + tagCounts.UNTAGGED;
 
 	// Chart series: fixed order, colors follow the entity (validated variants).
 	const tagSeries = (['APIN', 'KONTRA', 'UNTAGGED'] as const).map((t) => ({
@@ -270,18 +269,12 @@
 				<h1 class="h2">Welcome, {user.firstName || user.name}!</h1>
 				<p class="opacity-70 mt-1">
 					{#if isEncoderView}
-						Your job: keep household records correct and tagged.
+						Your job: keep household records complete and correct.
 					{:else}
 						Your job: award grants to the right households.
 					{/if}
 				</p>
 			</header>
-
-			{#if isEncoderView && tagCounts.UNTAGGED > 0}
-				<p class="opacity-70">
-					{tagCounts.UNTAGGED} of {totalHouseholds} households still need a tag.
-				</p>
-			{/if}
 
 			<!-- Big task buttons -->
 			<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -289,7 +282,7 @@
 					<a href="/dashboard/households" class="card p-8 variant-filled-primary text-center hover:brightness-110">
 						<p class="text-4xl mb-2">🏠</p>
 						<p class="text-xl font-bold text-white">Households</p>
-						<p class="text-white/80 mt-1">Tag, edit details, location & dependents</p>
+						<p class="text-white/80 mt-1">Edit details, location & dependents</p>
 					</a>
 					<a href="/dashboard/map" class="card p-8 variant-filled-secondary text-center hover:brightness-110">
 						<p class="text-4xl mb-2">🗺️</p>
@@ -319,8 +312,8 @@
 					{#if isEncoderView}
 						<li>Press <strong>Households</strong> above.</li>
 						<li>Find a family using the search box.</li>
-						<li>Press the colored tag button to set APIN, KONTRA, or UNTAGGED.</li>
 						<li>Press <strong>Update</strong> to fix names, location, or dependents.</li>
+						<li>Press <strong>Add Household</strong> to register a new family.</li>
 					{:else}
 						<li>Press <strong>Award Grants</strong> above.</li>
 						<li>Find a family using the search box.</li>

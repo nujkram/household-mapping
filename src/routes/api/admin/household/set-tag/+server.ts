@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import clientPromise from '$lib/server/mongo';
-import { canEditHouseholds } from '$lib/utils/roles';
+import { canTagHouseholds } from '$lib/utils/roles';
 import { encoderMayAccessBarangay } from '$lib/server/clusterAccess';
 
 // Define the valid tag values
@@ -12,10 +12,11 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		const { householdId, tag } = await request.json();
 
 		// Real HTTP status codes so callers' `response.ok` checks work.
-		// Admins and Encoders may tag (the central hook guard enforces this too).
+		// Only administrators may set the political tag (the hook guard also
+		// restricts this route to admins).
 		const user = locals.user;
-		if (!user || !canEditHouseholds(user.role)) {
-			return json({ error: 'Unauthorized' }, { status: 401 });
+		if (!user || !canTagHouseholds(user.role)) {
+			return json({ error: 'Unauthorized' }, { status: 403 });
 		}
 
 		if (!householdId) {

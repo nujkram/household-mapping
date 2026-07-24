@@ -11,10 +11,15 @@ export const loadGoogleMaps = async (apiKey: string, libraries: string[] = []): 
 		return loadingPromise;
 	}
 
+	// Always include `marker` — AdvancedMarkerElement is used across the app, and
+	// this loader is a singleton (the first caller's libraries win), so a caller
+	// that forgets it would otherwise break marker creation everywhere.
+	const libs = Array.from(new Set(['marker', ...libraries]));
+
 	loadingPromise = new Promise((resolve, reject) => {
 		try {
 			const script = document.createElement('script');
-			script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=${libraries.join(',')}&v=weekly`;
+			script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=${libs.join(',')}&v=weekly`;
 			script.async = true;
 			script.defer = true;
 

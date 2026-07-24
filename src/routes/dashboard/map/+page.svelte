@@ -1,12 +1,18 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import { MarkerClusterer } from '@googlemaps/markerclusterer';
+	import { page } from '$app/stores';
 	import { loadGoogleMaps } from '$lib/utils/googleMaps';
 	import { escapeHtml } from '$lib/utils/stringHelper';
 	import { getTagColor, TAG_LEGEND, TAG_VALUES } from '$lib/utils/tagHelper';
+	import { canTagHouseholds } from '$lib/utils/roles';
 	import type { PageData } from './$types';
 
 	export let data: PageData;
+
+	// Only admins see political tags; others get a neutral, tag-free map.
+	const showTags = canTagHouseholds($page.data.user?.role);
+	const NEUTRAL_COLOR = '#3B82F6';
 
 	let map: google.maps.Map;
 	let infoWindow: google.maps.InfoWindow;
@@ -40,7 +46,8 @@
 	function getMarkerIcon(tag: string | null): google.maps.Symbol {
 		return {
 			path: google.maps.SymbolPath.CIRCLE,
-			fillColor: getTagColor(tag),
+			// Tag-based color only for admins; everyone else gets a neutral pin.
+			fillColor: showTags ? getTagColor(tag) : NEUTRAL_COLOR,
 			fillOpacity: 0.8,
 			strokeColor: '#000000',
 			strokeWeight: 1,
@@ -49,11 +56,12 @@
 	}
 
 	function buildInfoContent(h: any): string {
+		const tagLine = showTags ? `Tag: ${escapeHtml(h.tag || 'UNTAGGED')}<br>` : '';
 		return `
 			<div class="info-window text-black">
 				<strong>${escapeHtml(h.fullName || 'Unnamed Household')}</strong><br>
 				Barangay: ${escapeHtml(barangayName.get(h.barangayId) || 'Unknown')}<br>
-				Tag: ${escapeHtml(h.tag || 'UNTAGGED')}<br>
+				${tagLine}
 				Address: ${escapeHtml(h.address || 'No address')}
 			</div>
 		`;
@@ -195,27 +203,29 @@
 			{/each}
 		</select>
 
-		<label class="sr-only" for="map-tag">Filter by tag</label>
-		<select
-			id="map-tag"
-			bind:value={selectedTag}
-			on:change={() => scheduleFetch(0)}
-			class="p-2 border rounded select"
-		>
-			<option value="">All Tags</option>
-			{#each TAG_VALUES as tag}
-				<option value={tag}>{tag}</option>
-			{/each}
-		</select>
+		{#if showTags}
+			<label class="sr-only" for="map-tag">Filter by tag</label>
+			<select
+				id="map-tag"
+				bind:value={selectedTag}
+				on:change={() => scheduleFetch(0)}
+				class="p-2 border rounded select"
+			>
+				<option value="">All Tags</option>
+				{#each TAG_VALUES as tag}
+					<option value={tag}>{tag}</option>
+				{/each}
+			</select>
 
-		<div class="flex flex-wrap items-center gap-4 ml-auto">
-			{#each TAG_LEGEND as { label, swatchClass }}
-				<div class="flex items-center gap-2">
-					<div class="w-4 h-4 rounded-full {swatchClass}"></div>
-					<span>{label}</span>
-				</div>
-			{/each}
-		</div>
+			<div class="flex flex-wrap items-center gap-4 ml-auto">
+				{#each TAG_LEGEND as { label, swatchClass }}
+					<div class="flex items-center gap-2">
+						<div class="w-4 h-4 rounded-full {swatchClass}"></div>
+						<span>{label}</span>
+					</div>
+				{/each}
+			</div>
+		{/if}
 	</div>
 
 	{#if !isLoading && !loadError}
