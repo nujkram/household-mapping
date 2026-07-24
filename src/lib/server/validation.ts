@@ -9,6 +9,14 @@ const nameField = z.string().trim().min(1, 'is required').toUpperCase();
 const optionalNameField = z.string().trim().toUpperCase().optional().default('');
 const coordinate = z.string().trim().min(1, 'is required');
 const phone = z.string().trim().optional().default('');
+/** Optional PSGC code: a 10-digit string, or '' when not set. */
+const optionalPsgc = z
+	.string()
+	.trim()
+	.regex(/^\d{10}$/, 'must be a 10-digit PSGC code')
+	.or(z.literal(''))
+	.optional()
+	.default('');
 
 // --- Barangay ---------------------------------------------------------------
 
@@ -21,7 +29,12 @@ export const barangayInsertSchema = z.object({
 	latitude: coordinate,
 	longitude: coordinate,
 	// '' = derive from the fixed name-based config.
-	cluster: z.enum(['CLUSTER_1', 'CLUSTER_2', 'CLUSTER_3']).or(z.literal('')).optional().default('')
+	cluster: z.enum(['CLUSTER_1', 'CLUSTER_2', 'CLUSTER_3']).or(z.literal('')).optional().default(''),
+	// PSGC (Philippine Standard Geographic Code) — all optional.
+	regionCode: optionalPsgc,
+	provinceCode: optionalPsgc,
+	cityMunicipalityCode: optionalPsgc,
+	barangayCode: optionalPsgc
 });
 
 export const barangayUpdateSchema = barangayInsertSchema.extend({
@@ -115,6 +128,9 @@ const dependentSchema = z
 const householdBaseSchema = z
 	.object({
 		barangayId: z.string().min(1),
+		// Human-readable household code (`<barangayCode>-<number>`). Optional; the
+		// form composes it, so kept lenient here.
+		householdCode: z.string().trim().optional().default(''),
 		firstName: nameField,
 		middleName: optionalNameField,
 		lastName: nameField,

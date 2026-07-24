@@ -6,6 +6,13 @@
 	import { barangayStore } from '$lib/stores/barangayStore';
 	import { loadGoogleMaps } from '$lib/utils/googleMaps';
 	import { CLUSTER_OPTIONS, clusterIdForBarangay, clusterLabel } from '$lib/utils/clusters';
+	import {
+		PSGC_BARANGAY_OPTIONS,
+		PSGC_REGION,
+		PSGC_PROVINCE,
+		PSGC_MUNICIPALITY,
+		psgcCodesFromBarangayCode
+	} from '$lib/utils/psgc';
 
 	export let drawerStore: DrawerStore;
 	/** Called after a successful insert so the parent page can refresh its data. */
@@ -21,8 +28,23 @@
 	let latitude: string;
 	let longitude: string;
 	let cluster = '';
+	// PSGC codes — barangayCode drives the three parent codes.
+	let barangayCode = '';
+	let regionCode = '';
+	let provinceCode = '';
+	let cityMunicipalityCode = '';
 	// What the name-based config would assign (shown as the "Auto" hint).
 	$: autoCluster = clusterIdForBarangay(name);
+
+	// Selecting an official barangay fills in its name + all four PSGC codes.
+	const applyPsgc = () => {
+		const parts = psgcCodesFromBarangayCode(barangayCode);
+		regionCode = parts.regionCode;
+		provinceCode = parts.provinceCode;
+		cityMunicipalityCode = parts.cityMunicipalityCode;
+		const match = PSGC_BARANGAY_OPTIONS.find((o) => o.value === barangayCode);
+		if (match) name = match.label;
+	};
 
 	let map: google.maps.Map;
 	let marker: google.maps.marker.AdvancedMarkerElement;
@@ -90,7 +112,11 @@
 				phone,
 				latitude,
 				longitude,
-				cluster
+				cluster,
+				regionCode,
+				provinceCode,
+				cityMunicipalityCode,
+				barangayCode
 			});
 			await barangayStore.refresh();
 			onSuccess?.();
@@ -118,6 +144,28 @@
 	<div class="mb-4 border border-gray-300 rounded-lg overflow-hidden">
 		<div id="map" class="h-[300px] w-full"></div>
 	</div>
+
+	<label class="label">
+		<span>PSGC Barangay <span class="opacity-60">(Sigma, Capiz)</span></span>
+		<select class="select" bind:value={barangayCode} on:change={applyPsgc}>
+			<option value="">— Select official barangay —</option>
+			{#each PSGC_BARANGAY_OPTIONS as o}
+				<option value={o.value}>{o.label} ({o.value})</option>
+			{/each}
+		</select>
+	</label>
+
+	{#if barangayCode}
+		<div class="card variant-soft p-3 text-sm space-y-1">
+			<div><span class="opacity-60">Region:</span> {PSGC_REGION.name} — {regionCode}</div>
+			<div><span class="opacity-60">Province:</span> {PSGC_PROVINCE.name} — {provinceCode}</div>
+			<div>
+				<span class="opacity-60">City/Municipality:</span>
+				{PSGC_MUNICIPALITY.name} — {cityMunicipalityCode}
+			</div>
+			<div><span class="opacity-60">Barangay code:</span> {barangayCode}</div>
+		</div>
+	{/if}
 
 	<label class="label">
 		<span>Name</span>

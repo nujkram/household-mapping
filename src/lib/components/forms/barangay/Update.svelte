@@ -7,6 +7,14 @@
 	import { barangayStore } from '$lib/stores/barangayStore';
 	import { loadGoogleMaps } from '$lib/utils/googleMaps';
 	import { CLUSTER_OPTIONS, clusterIdForBarangay, clusterLabel } from '$lib/utils/clusters';
+	import {
+		PSGC_BARANGAY_OPTIONS,
+		PSGC_REGION,
+		PSGC_PROVINCE,
+		PSGC_MUNICIPALITY,
+		psgcCodesFromBarangayCode,
+		psgcCodesForName
+	} from '$lib/utils/psgc';
 
 	export let drawerStore: DrawerStore;
 	export let data: Barangay;
@@ -17,6 +25,25 @@
 	// What the name-based config would assign if left on Auto.
 	$: autoCluster = clusterIdForBarangay(data.name);
 	let isSubmitting = false;
+
+	// PSGC codes: use the stored codes; if absent, offer the match for this name.
+	const seed = data.barangayCode
+		? psgcCodesFromBarangayCode(data.barangayCode)
+		: psgcCodesForName(data.name);
+	let barangayCode = seed.barangayCode;
+	let regionCode = seed.regionCode;
+	let provinceCode = seed.provinceCode;
+	let cityMunicipalityCode = seed.cityMunicipalityCode;
+
+	// Selecting an official barangay fills in its name + all four PSGC codes.
+	const applyPsgc = () => {
+		const parts = psgcCodesFromBarangayCode(barangayCode);
+		regionCode = parts.regionCode;
+		provinceCode = parts.provinceCode;
+		cityMunicipalityCode = parts.cityMunicipalityCode;
+		const match = PSGC_BARANGAY_OPTIONS.find((o) => o.value === barangayCode);
+		if (match) data.name = match.label;
+	};
 
 	let map: google.maps.Map;
 	let marker: google.maps.marker.AdvancedMarkerElement;
@@ -111,7 +138,11 @@
 				phone: data.phone,
 				latitude: data.latitude,
 				longitude: data.longitude,
-				cluster
+				cluster,
+				regionCode,
+				provinceCode,
+				cityMunicipalityCode,
+				barangayCode
 			});
 
 			// Update the store immediately with the new data
@@ -148,6 +179,28 @@
 	<div class="mb-4 border border-gray-300 rounded-lg overflow-hidden mt-4">
 		<div id="map" class="h-[300px] w-full"></div>
 	</div>
+
+	<label class="label">
+		<span>PSGC Barangay <span class="opacity-60">(Sigma, Capiz)</span></span>
+		<select class="select" bind:value={barangayCode} on:change={applyPsgc}>
+			<option value="">— Select official barangay —</option>
+			{#each PSGC_BARANGAY_OPTIONS as o}
+				<option value={o.value}>{o.label} ({o.value})</option>
+			{/each}
+		</select>
+	</label>
+
+	{#if barangayCode}
+		<div class="card variant-soft p-3 text-sm space-y-1">
+			<div><span class="opacity-60">Region:</span> {PSGC_REGION.name} — {regionCode}</div>
+			<div><span class="opacity-60">Province:</span> {PSGC_PROVINCE.name} — {provinceCode}</div>
+			<div>
+				<span class="opacity-60">City/Municipality:</span>
+				{PSGC_MUNICIPALITY.name} — {cityMunicipalityCode}
+			</div>
+			<div><span class="opacity-60">Barangay code:</span> {barangayCode}</div>
+		</div>
+	{/if}
 
 	<label class="label">
 		<span>Name</span>

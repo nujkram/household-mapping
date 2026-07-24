@@ -4,6 +4,8 @@
  * change membership, edit this file — nothing else.
  */
 
+import { BARANGAY_NAME_ALIASES } from './psgc';
+
 export type Cluster = {
 	id: string;
 	label: string;
@@ -20,8 +22,8 @@ export const CLUSTERS: Cluster[] = [
 		id: 'CLUSTER_2',
 		label: 'Cluster 2',
 		barangays: [
-			'Bangobangon',
-			'Acabo',
+			'Bangonbangon',
+			'Acbo',
 			'Poblacion Norte',
 			'Poblacion Sur',
 			'Capuyhan',
@@ -40,7 +42,7 @@ export const CLUSTERS: Cluster[] = [
 			'Mansacul',
 			'Matinabus',
 			'Pinamalatican',
-			'Balucan'
+			'Balucuan'
 		]
 	}
 ];
@@ -51,6 +53,12 @@ const norm = (s: string | null | undefined): string => (s || '').trim().toUpperC
 const NAME_TO_CLUSTER = new Map<string, string>();
 for (const c of CLUSTERS) {
 	for (const b of c.barangays) NAME_TO_CLUSTER.set(norm(b), c.id);
+}
+// Tolerate legacy spellings so resolution still works before the rename
+// backfill runs (e.g. a stored "ACABO" resolves like the official "Acbo").
+for (const [alias, official] of Object.entries(BARANGAY_NAME_ALIASES)) {
+	const cid = NAME_TO_CLUSTER.get(norm(official));
+	if (cid) NAME_TO_CLUSTER.set(norm(alias), cid);
 }
 
 export const CLUSTER_OPTIONS = CLUSTERS.map((c) => ({ value: c.id, label: c.label }));

@@ -5,16 +5,21 @@
 	import type { Barangay, Household, Dependents } from '$lib/utils/types';
 	import { barangayStore } from '$lib/stores/barangayStore';
 	import { loadGoogleMaps } from '$lib/utils/googleMaps';
-	import { id } from '$lib/common/utils';
 	import DependentFields from './DependentFields.svelte';
 	import SurveyFields from './SurveyFields.svelte';
 	import { surveyFrom, emptySurvey } from '$lib/utils/householdOptions';
+	import { canTagHouseholds } from '$lib/utils/roles';
+	import { psgcCodesForName } from '$lib/utils/psgc';
+	import { page } from '$app/stores';
 
 	export let drawerStore: DrawerStore;
 	export let data: Household;
 	export let barangay: Barangay;
 	/** Called after a successful update so the parent page can refresh its list. */
 	export let onSuccess: (() => void) | undefined = undefined;
+
+	// Only administrators may set the political tag.
+	$: canTag = canTagHouseholds($page.data.user?.role);
 
 	const isFocused = true;
 	let isSubmitting = false;
@@ -23,6 +28,23 @@
 	// Optional census-style survey fields, prefilled from the record.
 	const survey = surveyFrom(data as unknown as Record<string, unknown>);
 	let barangays: Barangay[] = [];
+
+	// Human-readable household code: <barangayCode>-<number>. Prefill the number
+	// from the stored code (the part after the barangay-code prefix); the prefix
+	// tracks whichever barangay is currently selected.
+	let householdNumber = (data.householdCode || '').includes('-')
+		? (data.householdCode || '').slice((data.householdCode || '').indexOf('-') + 1)
+		: '';
+	$: selectedBarangay = barangays.find((b) => b._id === barangay._id) ?? barangay;
+	$: barangayCodePrefix =
+		selectedBarangay?.barangayCode || psgcCodesForName(selectedBarangay?.name).barangayCode || '';
+	// With a prefix: compose (or blank, if the number was cleared). Without one
+	// (barangay has no derivable code) keep the stored code rather than wipe it.
+	$: householdCode = barangayCodePrefix
+		? householdNumber.trim()
+			? `${barangayCodePrefix}-${householdNumber.trim()}`
+			: ''
+		: data.householdCode || '';
 	// Seed survey defaults so every dependent has all optional keys bound.
 	let dependentFields: Dependents[] = (data.dependentDetails || []).map((d) => ({
 		...emptySurvey(),
@@ -134,37 +156,6 @@
 		});
 	};
 
-	$: {
-		if (data.dependents) {
-			const newLength = Number.parseInt(data.dependents.toString());
-
-			// If we need more fields
-			while (dependentFields.length < newLength) {
-				dependentFields = [
-					...dependentFields,
-					{
-						...emptySurvey(),
-						_id: id(),
-						householdId: data._id,
-						linkedHouseholdId: '',
-						firstName: '',
-						middleName: '',
-						lastName: '',
-						fullName: '',
-						dateOfBirth: '',
-						gender: 'MALE',
-						isVoter: false
-					}
-				];
-			}
-
-			// If we need fewer fields
-			if (dependentFields.length > newLength) {
-				dependentFields = dependentFields.slice(0, newLength);
-			}
-		}
-	}
-
 	const fetchHouseholdsForDependents = async () => {
 		try {
 			const response = await fetch(`/api/admin/household/list/${barangay._id}`, {
@@ -218,6 +209,7 @@
 				body: JSON.stringify({
 					_id: data._id,
 					barangayId: barangay._id,
+					householdCode,
 					lastName: data.lastName,
 					middleName: data.middleName,
 					firstName: data.firstName,
@@ -225,7 +217,7 @@
 					dateOfBirth: data.dateOfBirth,
 					phone: data.phone,
 					isVoter: data.isVoter,
-					dependents: data.dependents,
+					dependents: dependentFields.length,
 					dependentDetails: dependentFields,
 					latitude: data.latitude,
 					longitude: data.longitude,
@@ -261,136 +253,122 @@
 		}
 	}}
 >
-	<h2 class="text-2xl font-bold mb-4">Update Household</h2>
+	<h2 class="h3 mb-1">Update Household</h2>
+	<p class="text-sm opacity-60 mb-4">Edit the head of the family and the household members.</p>
 
-	<div class="mb-4 border border-gray-300 rounded-lg overflow-hidden">
-		<div id="map" class="h-[300px] w-full"></div>
-	</div>
-
-	<div class="grid grid-cols-2 gap-2">
+	<!-- 1. Household & Location -->
+	<section class="card p-4 space-y-3">
+		<h3 class="h4">Household &amp; Location</h3>
+		<div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+			<label class="label">
+				<span>Barangay</span>
+				<select class="select" bind:value={barangay._id}>
+					{#each barangays as b}
+						<option value={b._id}>{b.name}</option>
+					{/each}
+				</select>
+			</label>
+			{#if canTag}
+				<label class="label">
+					<span>Tag</span>
+					<select class="select" bind:value={data.tag}>
+						<option value="UNTAGGED">UNTAGGED</option>
+						<option value="APIN">APIN</option>
+						<option value="KONTRA">KONTRA</option>
+					</select>
+				</label>
+			{/if}
+		</div>
 		<label class="label">
-			<span>Barangay</span>
-			<select class="select" bind:value={barangay._id}>
-				{#each barangays as b}
-					<option value={b._id}>{b.name}</option>
-				{/each}
-			</select>
+			<span>Household Code</span>
+			<div class="input-group input-group-divider grid-cols-[auto_1fr]">
+				<div class="input-group-shim font-mono">
+					{barangayCodePrefix ? `${barangayCodePrefix}-` : '—'}
+				</div>
+				<input
+					type="text"
+					inputmode="numeric"
+					placeholder="e.g. 05"
+					bind:value={householdNumber}
+					disabled={!barangayCodePrefix}
+				/>
+			</div>
+			<span class="text-xs opacity-60">
+				{#if !barangayCodePrefix}
+					Select a barangay with a PSGC code to enable the household code.
+				{:else if householdCode}
+					Will be saved as <span class="font-mono">{householdCode}</span>.
+				{:else}
+					Enter the household number to complete the code.
+				{/if}
+			</span>
 		</label>
+		<div>
+			<span class="text-sm opacity-70">Tap the map to move the pin, or drag it.</span>
+			<div class="mt-1 border border-surface-500-400-token rounded-lg overflow-hidden">
+				<div id="map" class="h-[300px] w-full"></div>
+			</div>
+		</div>
+	</section>
 
-		<label class="label">
-			<span>First Name</span>
-			<input
-				class="input"
-				type="text"
-				placeholder="Juan"
-				name="firstName"
-				bind:value={data.firstName}
-				required
-			/>
-		</label>
+	<!-- 2. Head of the family -->
+	<section class="card p-4 space-y-3">
+		<h3 class="h4">Head of the Family</h3>
+		<div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+			<label class="label">
+				<span>First Name</span>
+				<input class="input" type="text" placeholder="Juan" bind:value={data.firstName} required />
+			</label>
+			<label class="label">
+				<span>Middle Name</span>
+				<input class="input" type="text" placeholder="Alfon" bind:value={data.middleName} />
+			</label>
+			<label class="label">
+				<span>Last Name</span>
+				<input class="input" type="text" placeholder="Dela Cruz" bind:value={data.lastName} required />
+			</label>
+			<label class="label">
+				<span>Phone</span>
+				<input class="input" type="text" placeholder="09171234567" bind:value={data.phone} />
+			</label>
+			<label class="label">
+				<span>Gender</span>
+				<select class="select" bind:value={data.gender}>
+					<option value="MALE">Male</option>
+					<option value="FEMALE">Female</option>
+				</select>
+			</label>
+			<label class="label">
+				<span>Date of Birth</span>
+				<input class="input" type="date" bind:value={data.dateOfBirth} />
+			</label>
+			<label class="label flex items-center gap-2">
+				<input class="checkbox" type="checkbox" bind:checked={data.isVoter} />
+				<span>Registered voter</span>
+			</label>
+		</div>
+	</section>
 
-		<label class="label">
-			<span>Middle Name</span>
-			<input
-				class="input"
-				type="text"
-				placeholder="Alfon"
-				name="middleName"
-				bind:value={data.middleName}
-			/>
-		</label>
-
-		<label class="label">
-			<span>Last Name</span>
-			<input
-				class="input"
-				type="text"
-				placeholder="Dela Cruz"
-				name="lastName"
-				bind:value={data.lastName}
-				required
-			/>
-		</label>
-
-		<label class="label">
-			<span>Phone</span>
-			<input
-				class="input"
-				type="text"
-				placeholder="09171234567"
-				name="phone"
-				bind:value={data.phone}
-			/>
-		</label>
-
-		<label class="label">
-			<span>Gender</span>
-			<select class="select" bind:value={data.gender}>
-				<option value="MALE">Male</option>
-				<option value="FEMALE">Female</option>
-			</select>
-		</label>
-
-		<label class="label">
-			<span>Date of Birth</span>
-			<input class="input" type="date" name="dateOfBirth" bind:value={data.dateOfBirth} />
-		</label>
-
-		<label class="label flex items-center gap-2">
-			<span>Is Voter</span>
-			<input class="input w-4" type="checkbox" name="isVoter" bind:checked={data.isVoter} />
-		</label>
-
-		<label class="label">
-			<span>Tag</span>
-			<select class="select" bind:value={data.tag}>
-				<option value="UNTAGGED">UNTAGGED</option>
-				<option value="APIN">APIN</option>
-				<option value="KONTRA">KONTRA</option>
-			</select>
-		</label>
-
-		<label class="label">
-			<span>Dependents</span>
-			<input class="input" type="number" name="dependents" bind:value={data.dependents} />
-		</label>
-
+	<!-- 3. Members -->
+	<section class="card p-4">
 		<DependentFields bind:dependentFields households={householdsForDependents} />
+	</section>
 
+	<!-- 4. Optional census details -->
+	<section class="card p-4">
 		<SurveyFields {survey} />
-	</div>
+	</section>
 
-	<label class="hidden label">
-		<span>Latitude</span>
-		<input class="input" type="text" name="latitude" bind:value={data.latitude} readonly required />
-	</label>
+	<!-- Coordinates captured by the map (hidden). -->
+	<input type="hidden" bind:value={data.latitude} />
+	<input type="hidden" bind:value={data.longitude} />
 
-	<label class="hidden label">
-		<span>Longitude</span>
-		<input
-			class="input"
-			type="text"
-			name="longitude"
-			bind:value={data.longitude}
-			readonly
-			required
-		/>
-	</label>
-
-	<div class="flex justify-end space-x-4">
-		<button
-			type="submit"
-			disabled={isSubmitting}
-			class="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 disabled:opacity-50 disabled:cursor-not-allowed"
-		>
-			{isSubmitting ? 'Updating...' : 'Update'}
-		</button>
-		<button
-			type="button"
-			class="px-4 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-opacity-50"
-			on:click={() => drawerStore.close()}
-		>
+	<div class="flex justify-end gap-3 pt-2">
+		<button type="button" class="btn variant-soft" on:click={() => drawerStore.close()}>
 			Cancel
+		</button>
+		<button type="submit" class="btn variant-filled-success" disabled={isSubmitting}>
+			{isSubmitting ? 'Updating...' : 'Update Household'}
 		</button>
 	</div>
 </form>

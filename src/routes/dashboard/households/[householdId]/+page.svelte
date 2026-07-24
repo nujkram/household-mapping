@@ -21,7 +21,7 @@
 		labelFor
 	} from '$lib/utils/householdOptions';
 	import { submitJson } from '$lib/utils/apiHelper';
-	import { canEditHouseholds, canManageGrants } from '$lib/utils/roles';
+	import { canEditHouseholds, canManageGrants, canTagHouseholds } from '$lib/utils/roles';
 	import { serviceCentavos, formatCentavos } from '$lib/utils/money';
 	import { page } from '$app/stores';
 	import Update from '$lib/components/forms/household/Update.svelte';
@@ -36,6 +36,7 @@
 	$: userRole = $page.data.user?.role;
 	$: canEdit = canEditHouseholds(userRole);
 	$: canGrant = canManageGrants(userRole);
+	$: canTag = canTagHouseholds(userRole);
 
 	// Aggregation results are driver `Document`s; this app uses string _ids.
 	$: household = data.household as any;
@@ -291,7 +292,9 @@
 		<header class="card-header flex flex-wrap items-center justify-between gap-2">
 			<h1 class="h2 flex items-center gap-3">
 				{household.fullName || 'Unnamed Household'}
-				<span class="badge {tagConfig.swatchClass} text-white">{tagConfig.label}</span>
+				{#if canTag}
+					<span class="badge {tagConfig.swatchClass} text-white">{tagConfig.label}</span>
+				{/if}
 			</h1>
 			<div class="btn-group variant-filled">
 				{#if canEdit}
@@ -384,6 +387,10 @@
 				<div class="card p-4">
 					<h2 class="h3 mb-4">Location & Record</h2>
 					<dl class="space-y-2">
+						<div>
+							<dt class="font-bold inline">Household Code:</dt>
+							<dd class="inline font-mono">{household.householdCode || '—'}</dd>
+						</div>
 						<div>
 							<dt class="font-bold inline">Barangay:</dt>
 							<dd class="inline">
@@ -539,11 +546,13 @@
 						{#each subFamilies as family (family._id)}
 							<div class="card p-4 flex flex-col gap-2">
 								<div class="flex items-center gap-2">
-									<span
-										class="inline-block w-3 h-3 rounded-full shrink-0 {getTagConfig(family.tag)
-											.swatchClass}"
-										title={getTagConfig(family.tag).label}
-									></span>
+									{#if canTag}
+										<span
+											class="inline-block w-3 h-3 rounded-full shrink-0 {getTagConfig(family.tag)
+												.swatchClass}"
+											title={getTagConfig(family.tag).label}
+										></span>
+									{/if}
 									<h3 class="h5 font-semibold">{family.fullName}</h3>
 								</div>
 								<p class="text-sm opacity-60">

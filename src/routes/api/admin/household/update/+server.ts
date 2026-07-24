@@ -5,6 +5,7 @@ import { householdUpdateSchema, pickSurveyFields, badRequest } from '$lib/server
 import { encoderMayAccessBarangay } from '$lib/server/clusterAccess';
 import { syncFamilyLinks } from '$lib/server/familyLinks';
 import { parseCoord } from '$lib/utils/geo';
+import { canTagHouseholds } from '$lib/utils/roles';
 
 export const POST: RequestHandler = async ({ request, locals }) => {
 	if (!locals.user) return json({ status: 'Error', error: 'Unauthorized' }, { status: 401 });
@@ -39,6 +40,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 		const set: Record<string, unknown> = {
 			updatedAt: new Date(),
+			householdCode: data.householdCode,
 			lastName: data.lastName,
 			middleName: data.middleName,
 			firstName: data.firstName,
@@ -58,7 +60,8 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			...pickSurveyFields(data),
 			updatedBy: locals.user._id
 		};
-		if (data.tag) set.tag = data.tag;
+		// Only admins may change the tag; for others it's left untouched.
+		if (data.tag && canTagHouseholds(locals.user.role)) set.tag = data.tag;
 
 		// Optimistic concurrency: only write if updatedAt still matches what the
 		// client loaded. Prevents one editor silently clobbering another's save.

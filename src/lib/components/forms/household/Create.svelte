@@ -6,10 +6,10 @@
 	import { barangayStore } from '$lib/stores/barangayStore';
 	import type { Barangay, Dependents, Household } from '$lib/utils/types';
 	import { loadGoogleMaps } from '$lib/utils/googleMaps';
-	import { id } from '$lib/common/utils';
 	import DependentFields from './DependentFields.svelte';
 	import SurveyFields from './SurveyFields.svelte';
 	import { emptySurvey } from '$lib/utils/householdOptions';
+	import { psgcCodesForName } from '$lib/utils/psgc';
 
 	export let drawerStore: DrawerStore;
 	export let data: Barangay;
@@ -25,7 +25,6 @@
 	let dateOfBirth: Date;
 	let phone: string;
 	let isVoter: boolean = false;
-	let dependents: number = 0;
 	let latitude: string;
 	let longitude: string;
 
@@ -34,6 +33,17 @@
 	let householdsForDependents: Household[] = [];
 	// Optional census-style survey fields.
 	const survey = emptySurvey();
+
+	// Human-readable household code: <barangayCode>-<number>. The prefix comes
+	// from the selected barangay; the number is typed manually.
+	let householdNumber = '';
+	$: selectedBarangay = barangays.find((b) => b._id === data._id) ?? data;
+	$: barangayCodePrefix =
+		selectedBarangay?.barangayCode || psgcCodesForName(selectedBarangay?.name).barangayCode || '';
+	$: householdCode =
+		barangayCodePrefix && householdNumber.trim()
+			? `${barangayCodePrefix}-${householdNumber.trim()}`
+			: '';
 
 	let map: google.maps.Map;
 	let marker: google.maps.marker.AdvancedMarkerElement;
@@ -58,30 +68,32 @@
 	};
 
 	onMount(async () => {
-		const apiKey: string = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
-		if (!apiKey) {
-			const mapError = 'Google Maps API key is missing. Please check your .env file.';
-			showToast(toastStore, mapError, true);
-			return;
-		}
-
+		// Barangays (the dropdown) + linkable households are the critical data —
+		// load them independently so a Google Maps failure can't blank the form.
 		try {
-			await loadGoogleMaps(apiKey);
-			initMap();
-
 			const response = await fetch('/api/admin/barangay', {
 				method: 'GET',
-				headers: {
-					'Content-Type': 'application/json'
-				}
+				headers: { 'Content-Type': 'application/json' }
 			});
-
 			const result = await response.json();
-			barangays = result.response;
-
+			barangays = result.response ?? [];
 			await fetchHouseholdsForDependents(data._id);
 		} catch (error) {
-			showToast(toastStore, 'Failed to load Google Maps', false);
+			showToast(toastStore, 'Failed to load barangays', false);
+			console.error(error);
+		}
+
+		// The location map is secondary; its failure must not break data entry.
+		const apiKey: string = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
+		if (!apiKey) {
+			showToast(toastStore, 'Map unavailable: Google Maps API key is missing.', false);
+			return;
+		}
+		try {
+			await loadGoogleMaps(apiKey, ['marker']);
+			initMap();
+		} catch (error) {
+			showToast(toastStore, 'The location map could not be loaded.', false);
 			console.error(error);
 		}
 	});
@@ -132,36 +144,6 @@
 		});
 	};
 
-	$: {
-		// Reset and regenerate dependent fields when dependents number changes
-		if (dependents) {
-			const newLength = Number.parseInt(dependents.toString());
-
-			// If we need more fields
-			while (dependentFields.length < newLength) {
-				dependentFields = [
-					...dependentFields,
-					{
-						...emptySurvey(),
-						_id: id(),
-						householdId: '', // Will be set after household creation
-						firstName: '',
-						middleName: '',
-						lastName: '',
-						fullName: '',
-						dateOfBirth: '',
-						gender: 'MALE',
-						isVoter: false
-					}
-				];
-			}
-
-			// If we need fewer fields
-			if (dependentFields.length > newLength) {
-				dependentFields = dependentFields.slice(0, newLength);
-			}
-		}
-	}
 </script>
 
 <form
@@ -175,6 +157,7 @@
 		try {
 			const result = await submitJson('/api/admin/household/insert', {
 				barangayId: data._id,
+				householdCode,
 				lastName,
 				middleName,
 				firstName,
@@ -182,7 +165,7 @@
 				dateOfBirth,
 				phone,
 				isVoter,
-				dependents,
+				dependents: dependentFields.length,
 				dependentDetails: dependentFields,
 				latitude,
 				longitude,
@@ -201,13 +184,12 @@
 		}
 	}}
 >
-	<h2 class="text-2xl font-bold mb-4">Create Household</h2>
+	<h2 class="h3 mb-1">Add Household</h2>
+	<p class="text-sm opacity-60 mb-4">Fill in the head of the family, then add the other members.</p>
 
-	<div class="mb-4 border border-gray-300 rounded-lg overflow-hidden">
-		<div id="map" class="h-[300px] w-full"></div>
-	</div>
-
-	<div class="grid grid-cols-2 gap-2">
+	<!-- 1. Household & Location -->
+	<section class="card p-4 space-y-3">
+		<h3 class="h4">Household &amp; Location</h3>
 		<label class="label">
 			<span>Barangay</span>
 			<select
@@ -220,106 +202,96 @@
 				{/each}
 			</select>
 		</label>
-
 		<label class="label">
-			<span>First Name</span>
-			<input
-				class="input"
-				type="text"
-				placeholder="Juan"
-				name="firstName"
-				bind:value={firstName}
-				required
-			/>
+			<span>Household Code</span>
+			<div class="input-group input-group-divider grid-cols-[auto_1fr]">
+				<div class="input-group-shim font-mono">
+					{barangayCodePrefix ? `${barangayCodePrefix}-` : '—'}
+				</div>
+				<input
+					type="text"
+					inputmode="numeric"
+					placeholder="e.g. 05"
+					bind:value={householdNumber}
+					disabled={!barangayCodePrefix}
+				/>
+			</div>
+			<span class="text-xs opacity-60">
+				{#if !barangayCodePrefix}
+					Select a barangay with a PSGC code to enable the household code.
+				{:else if householdCode}
+					Will be saved as <span class="font-mono">{householdCode}</span>.
+				{:else}
+					Enter the household number to complete the code.
+				{/if}
+			</span>
 		</label>
+		<div>
+			<span class="text-sm opacity-70">Tap the map to drop the pin on the house, or drag it.</span>
+			<div class="mt-1 border border-surface-500-400-token rounded-lg overflow-hidden">
+				<div id="map" class="h-[300px] w-full"></div>
+			</div>
+		</div>
+	</section>
 
-		<label class="label">
-			<span>Middle Name</span>
-			<input
-				class="input"
-				type="text"
-				placeholder="Alfon"
-				name="middleName"
-				bind:value={middleName}
-			/>
-		</label>
+	<!-- 2. Head of the family -->
+	<section class="card p-4 space-y-3">
+		<h3 class="h4">Head of the Family</h3>
+		<div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+			<label class="label">
+				<span>First Name</span>
+				<input class="input" type="text" placeholder="Juan" bind:value={firstName} required />
+			</label>
+			<label class="label">
+				<span>Middle Name</span>
+				<input class="input" type="text" placeholder="Alfon" bind:value={middleName} />
+			</label>
+			<label class="label">
+				<span>Last Name</span>
+				<input class="input" type="text" placeholder="Dela Cruz" bind:value={lastName} required />
+			</label>
+			<label class="label">
+				<span>Phone</span>
+				<input class="input" type="text" placeholder="09171234567" bind:value={phone} />
+			</label>
+			<label class="label">
+				<span>Gender</span>
+				<select class="select" bind:value={gender}>
+					<option value="MALE">Male</option>
+					<option value="FEMALE">Female</option>
+				</select>
+			</label>
+			<label class="label">
+				<span>Date of Birth</span>
+				<input class="input" type="date" bind:value={dateOfBirth} />
+			</label>
+			<label class="label flex items-center gap-2">
+				<input class="checkbox" type="checkbox" bind:checked={isVoter} />
+				<span>Registered voter</span>
+			</label>
+		</div>
+	</section>
 
-		<label class="label">
-			<span>Last Name</span>
-			<input
-				class="input"
-				type="text"
-				placeholder="Dela Cruz"
-				name="lastName"
-				bind:value={lastName}
-				required
-			/>
-		</label>
-
-		<label class="label">
-			<span>Phone</span>
-			<input
-				class="input"
-				type="text"
-				placeholder="09171234567"
-				name="phone"
-				bind:value={phone}
-				required
-			/>
-		</label>
-
-		<label class="label">
-			<span>Gender</span>
-			<select class="select" bind:value={gender}>
-				<option value="MALE">Male</option>
-				<option value="FEMALE">Female</option>
-			</select>
-		</label>
-
-		<label class="label">
-			<span>Date of Birth</span>
-			<input class="input" type="date" name="dateOfBirth" bind:value={dateOfBirth} />
-		</label>
-
-		<label class="label flex items-center gap-2">
-			<span>Is Voter</span>
-			<input class="input w-4" type="checkbox" name="isVoter" bind:checked={isVoter} />
-		</label>
-
-		<label class="label">
-			<span>Dependents</span>
-			<input class="input" type="number" name="dependents" bind:value={dependents} required />
-		</label>
-
+	<!-- 3. Members -->
+	<section class="card p-4">
 		<DependentFields bind:dependentFields households={householdsForDependents} />
+	</section>
 
+	<!-- 4. Optional census details -->
+	<section class="card p-4">
 		<SurveyFields {survey} />
-	</div>
+	</section>
 
-	<label class="hidden label">
-		<span>Latitude</span>
-		<input class="input" type="text" name="latitude" bind:value={latitude} readonly required />
-	</label>
+	<!-- Coordinates captured by the map (hidden). -->
+	<input type="hidden" bind:value={latitude} />
+	<input type="hidden" bind:value={longitude} />
 
-	<label class="hidden label">
-		<span>Longitude</span>
-		<input class="input" type="text" name="longitude" bind:value={longitude} readonly required />
-	</label>
-
-	<div class="flex justify-end space-x-4">
-		<button
-			type="submit"
-			disabled={isSubmitting}
-			class="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 disabled:opacity-50 disabled:cursor-not-allowed"
-		>
-			{isSubmitting ? 'Saving...' : 'Submit'}
-		</button>
-		<button
-			type="button"
-			class="px-4 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-opacity-50"
-			on:click={() => drawerStore.close()}
-		>
+	<div class="flex justify-end gap-3 pt-2">
+		<button type="button" class="btn variant-soft" on:click={() => drawerStore.close()}>
 			Cancel
+		</button>
+		<button type="submit" class="btn variant-filled-success" disabled={isSubmitting}>
+			{isSubmitting ? 'Saving...' : 'Save Household'}
 		</button>
 	</div>
 </form>

@@ -29,6 +29,10 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				latitude: data.latitude,
 				longitude: data.longitude,
 				cluster: data.cluster,
+				regionCode: data.regionCode,
+				provinceCode: data.provinceCode,
+				cityMunicipalityCode: data.cityMunicipalityCode,
+				barangayCode: data.barangayCode,
 				updatedBy: locals.user._id
 			}
 		}

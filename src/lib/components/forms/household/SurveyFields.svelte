@@ -20,6 +20,8 @@
 	export let title = 'Additional Details';
 	/** Compact mode (used inside dependent cards): no divider, smaller heading. */
 	export let compact = false;
+	/** Hide the relationship-to-head field (members show it as a table column). */
+	export let hideRelationship = false;
 </script>
 
 <div class="col-span-2 space-y-4">
@@ -54,23 +56,25 @@
 					{#each SOCIOECONOMIC_OPTIONS as o}<option value={o.value}>{o.label}</option>{/each}
 				</select>
 			</label>
-			<label class="label">
-				<span>Relationship to Household Head</span>
-				<select class="select" bind:value={survey.relationshipToHead}>
-					<option value="">Not answered</option>
-					{#each RELATIONSHIP_OPTIONS as o}<option value={o.value}>{o.value} — {o.label}</option>{/each}
-				</select>
-			</label>
-			{#if survey.relationshipToHead === '4'}
+			{#if !hideRelationship}
 				<label class="label">
-					<span>Specify Relation</span>
-					<input
-						class="input"
-						type="text"
-						placeholder="e.g. GRANDCHILD"
-						bind:value={survey.relationshipOther}
-					/>
+					<span>Relationship to Household Head</span>
+					<select class="select" bind:value={survey.relationshipToHead}>
+						<option value="">Not answered</option>
+						{#each RELATIONSHIP_OPTIONS as o}<option value={o.value}>{o.value} — {o.label}</option>{/each}
+					</select>
 				</label>
+				{#if survey.relationshipToHead === '4'}
+					<label class="label">
+						<span>Specify Relation</span>
+						<input
+							class="input"
+							type="text"
+							placeholder="e.g. GRANDCHILD"
+							bind:value={survey.relationshipOther}
+						/>
+					</label>
+				{/if}
 			{/if}
 			<label class="label">
 				<span>Civil Status</span>

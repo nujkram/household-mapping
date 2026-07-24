@@ -11,6 +11,13 @@
 	import type { Household } from '$lib/utils/types';
 	import { goto, invalidateAll } from '$app/navigation';
 	import { clusterLabel, resolveClusterId } from '$lib/utils/clusters';
+	import {
+		PSGC_REGION,
+		PSGC_PROVINCE,
+		PSGC_MUNICIPALITY,
+		psgcCodesFromBarangayCode,
+		psgcCodesForName
+	} from '$lib/utils/psgc';
 
 	export let data;
 
@@ -18,6 +25,13 @@
 	// edits). No more reconciling against the global barangay store.
 	// (Aggregation results are driver `Document`s; this app uses string _ids.)
 	$: barangayDetail = data.barangayDetail as any;
+
+	// PSGC codes: prefer the stored barangay code, else derive from the name.
+	// Parent codes are always derived from the barangay code so they stay
+	// consistent (region/province/municipality are prefixes of it).
+	$: psgc = psgcCodesFromBarangayCode(
+		barangayDetail?.barangayCode || psgcCodesForName(barangayDetail?.name).barangayCode
+	);
 
 	let selectedHousehold: Household;
 
@@ -141,6 +155,24 @@
 						<span>
 							{barangayDetail?.latitude || 'N/A'}, {barangayDetail?.longitude || 'N/A'}
 						</span>
+					</div>
+					<div class="pt-2 mt-2 border-t border-surface-500-400-token/40 space-y-1">
+						<span class="font-bold">PSGC Codes:</span>
+						{#if psgc.barangayCode}
+							<div class="text-sm space-y-0.5">
+								<div><span class="opacity-60">Region:</span> {PSGC_REGION.name} — {psgc.regionCode}</div>
+								<div>
+									<span class="opacity-60">Province:</span> {PSGC_PROVINCE.name} — {psgc.provinceCode}
+								</div>
+								<div>
+									<span class="opacity-60">City/Municipality:</span>
+									{PSGC_MUNICIPALITY.name} — {psgc.cityMunicipalityCode}
+								</div>
+								<div><span class="opacity-60">Barangay:</span> {psgc.barangayCode}</div>
+							</div>
+						{:else}
+							<span class="opacity-60">Not set</span>
+						{/if}
 					</div>
 				</div>
 			</div>

@@ -10,12 +10,19 @@ export type Barangay = {
 	longitude: string;
 	/** Explicit cluster override; '' = derive from the fixed name-based config. */
 	cluster?: string;
+	/** PSGC (Philippine Standard Geographic Code) — 10-digit codes per level. */
+	regionCode?: string;
+	provinceCode?: string;
+	cityMunicipalityCode?: string;
+	barangayCode?: string;
 	households?: Household[];
 };
 
 export type Household = {
 	_id: string;
 	barangayId: string;
+	/** Human-readable household code, format `<barangayCode>-<number>` (optional). */
+	householdCode?: string;
 	lastName: string;
 	middleName: string;
 	firstName: string;

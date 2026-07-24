@@ -1,7 +1,12 @@
 <script lang="ts">
 	import type { Barangay } from '$lib/utils/types';
 	import { clusterLabel, resolveClusterId } from '$lib/utils/clusters';
+	import { psgcCodesForName } from '$lib/utils/psgc';
 	export let data: Barangay[];
+
+	/** Stored barangay code, or the register match for the name. */
+	const psgcCode = (b: Barangay): string =>
+		b.barangayCode || psgcCodesForName(b.name).barangayCode;
 	export let handleClickView: (item: Barangay) => void;
 	export let handleClickUpdate: (item: Barangay) => void;
 </script>
@@ -11,6 +16,7 @@
 		<thead>
 			<tr>
 				<th>Name</th>
+				<th>PSGC Code</th>
 				<th>Cluster</th>
 				<th>Captain</th>
 				<th>Phone</th>
@@ -20,12 +26,19 @@
 		<tbody>
 			{#if data.length === 0}
 				<tr>
-					<td colspan="5" class="text-center py-8 opacity-60">No barangays yet.</td>
+					<td colspan="6" class="text-center py-8 opacity-60">No barangays yet.</td>
 				</tr>
 			{/if}
 			{#each data as item, i}
 				<tr>
 					<td>{item.name}</td>
+					<td>
+						{#if psgcCode(item)}
+							<span class="font-mono text-sm">{psgcCode(item)}</span>
+						{:else}
+							<span class="opacity-40">—</span>
+						{/if}
+					</td>
 					<td>
 						{#if resolveClusterId(item)}
 							<span class="badge variant-soft">{clusterLabel(resolveClusterId(item))}</span>

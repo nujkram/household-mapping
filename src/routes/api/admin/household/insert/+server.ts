@@ -31,6 +31,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	const household = {
 		_id: id(),
 		barangayId: data.barangayId,
+		householdCode: data.householdCode,
 		firstName: data.firstName,
 		middleName: data.middleName,
 		lastName: data.lastName,
