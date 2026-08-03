@@ -128,9 +128,16 @@ const dependentSchema = z
 const householdBaseSchema = z
 	.object({
 		barangayId: z.string().min(1),
-		// Human-readable household code (`<barangayCode>-<number>`). Optional; the
-		// form composes it, so kept lenient here.
-		householdCode: z.string().trim().optional().default(''),
+		// Human-readable household code (`<barangayCode>-<number>`). Optional, but
+		// when present it must match the composed shape (and be unique — enforced
+		// by the endpoints + a partial unique index).
+		householdCode: z
+			.string()
+			.trim()
+			.regex(/^\d{9,10}-\d+$/, 'must look like <barangayCode>-<number>')
+			.or(z.literal(''))
+			.optional()
+			.default(''),
 		firstName: nameField,
 		middleName: optionalNameField,
 		lastName: nameField,

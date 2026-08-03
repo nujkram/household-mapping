@@ -27,6 +27,21 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	// String _ids (Meteor-style) — type the collection to accept them.
 	const Household = db.collection<{ _id: string; [key: string]: unknown }>('households');
 
+	// A non-empty household code must be unique (also backed by a partial unique
+	// index; this pre-check gives a friendly message before hitting it).
+	if (data.householdCode) {
+		const duplicate = await Household.findOne(
+			{ householdCode: data.householdCode },
+			{ projection: { _id: 1 } }
+		);
+		if (duplicate) {
+			return json(
+				{ status: 'Error', error: `A household with code ${data.householdCode} already exists.` },
+				{ status: 409 }
+			);
+		}
+	}
+
 	const now = new Date();
 	const household = {
 		_id: id(),
@@ -59,19 +74,30 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	};
 
 	// Insert + family-link resync commit all-or-nothing.
-	await withTransaction(async (session) => {
-		await Household.insertOne(household, session ? { session } : {});
-		// Multi-family dwellings: dependents linked at creation make those families
-		// members of this new dwelling.
-		await syncFamilyLinks(
-			db,
-			household._id,
-			data.dependentDetails,
-			{ latitude: data.latitude, longitude: data.longitude },
-			undefined,
-			session
-		);
-	});
+	try {
+		await withTransaction(async (session) => {
+			await Household.insertOne(household, session ? { session } : {});
+			// Multi-family dwellings: dependents linked at creation make those families
+			// members of this new dwelling.
+			await syncFamilyLinks(
+				db,
+				household._id,
+				data.dependentDetails,
+				{ latitude: data.latitude, longitude: data.longitude },
+				undefined,
+				session
+			);
+		});
+	} catch (error) {
+		// Unique index race on householdCode (the pre-check can't cover concurrency).
+		if ((error as { code?: number })?.code === 11000) {
+			return json(
+				{ status: 'Error', error: `A household with code ${data.householdCode} already exists.` },
+				{ status: 409 }
+			);
+		}
+		throw error;
+	}
 
 	return json({ status: 'Success', message: 'Data inserted successfully' });
 };

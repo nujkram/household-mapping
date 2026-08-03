@@ -38,6 +38,20 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			);
 		}
 
+		// A non-empty household code must be unique across OTHER records.
+		if (data.householdCode) {
+			const dupCode = await Household.findOne(
+				{ _id: { $ne: data._id }, householdCode: data.householdCode },
+				{ projection: { _id: 1 } }
+			);
+			if (dupCode) {
+				return json(
+					{ status: 'Error', error: `A household with code ${data.householdCode} already exists.` },
+					{ status: 409 }
+				);
+			}
+		}
+
 		const set: Record<string, unknown> = {
 			updatedAt: new Date(),
 			householdCode: data.householdCode,
@@ -96,6 +110,13 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 		return json({ status: 'Success', message: 'Data updated successfully' });
 	} catch (error) {
+		// Unique index race on householdCode (the pre-check can't cover concurrency).
+		if ((error as { code?: number })?.code === 11000) {
+			return json(
+				{ status: 'Error', error: `A household with code ${data.householdCode} already exists.` },
+				{ status: 409 }
+			);
+		}
 		console.error('Error updating household:', error);
 		return json({ status: 'Error', error: 'Failed to update household' }, { status: 500 });
 	}

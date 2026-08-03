@@ -36,7 +36,11 @@ const ensureIndexes = async (db: Db): Promise<void> => {
 	// that can't build because pre-existing duplicates exist) doesn't block the
 	// rest. A failed unique index just means uniqueness isn't enforced yet —
 	// logged loudly so the dupes can be cleaned up and the app is redeployed.
-	const specs: [string, Record<string, 1 | -1>, { unique?: boolean }?][] = [
+	const specs: [
+		string,
+		Record<string, 1 | -1>,
+		{ unique?: boolean; partialFilterExpression?: Record<string, unknown> }?
+	][] = [
 		['users', { 'services.resume.loginTokens.hashedToken': 1 }],
 		['users', { username: 1 }, { unique: true }],
 		['households', { barangayId: 1 }],
@@ -50,6 +54,13 @@ const ensureIndexes = async (db: Db): Promise<void> => {
 		['households', { tag: 1 }],
 		// Numeric coordinate mirror for indexed viewport/bounds queries.
 		['households', { lat: 1, lng: 1 }],
+		// Human-readable household code is unique WHEN SET. Partial filter skips the
+		// empty-string legacy rows, so the unique index builds over existing data.
+		[
+			'households',
+			{ householdCode: 1 },
+			{ unique: true, partialFilterExpression: { householdCode: { $gt: '' } } }
+		],
 		['grants', { name: 1, year: 1 }, { unique: true }],
 		['services', { dateReceived: -1 }],
 		// Service lookups + the per-household service totals on the list page.

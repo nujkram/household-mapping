@@ -45,6 +45,18 @@
 			? `${barangayCodePrefix}-${householdNumber.trim()}`
 			: '';
 
+	// Warn (don't block) when the head-of-family name already exists in the
+	// selected barangay — likely a re-entry. The encoder confirms to override.
+	const sameName = (a?: string | null, b?: string | null) =>
+		(a || '').trim().toUpperCase() === (b || '').trim().toUpperCase();
+	let ackDuplicate = false;
+	$: dupMatches =
+		firstName?.trim() && lastName?.trim()
+			? householdsForDependents.filter(
+					(h) => sameName(h.firstName, firstName) && sameName(h.lastName, lastName)
+				)
+			: [];
+
 	let map: google.maps.Map;
 	let marker: google.maps.marker.AdvancedMarkerElement;
 
@@ -286,11 +298,42 @@
 	<input type="hidden" bind:value={latitude} />
 	<input type="hidden" bind:value={longitude} />
 
+	<!-- Possible-duplicate warning: same head-of-family name in this barangay. -->
+	{#if dupMatches.length > 0}
+		<div class="card variant-soft-warning p-4 space-y-2">
+			<p class="font-semibold">⚠️ Possible duplicate</p>
+			<p class="text-sm">
+				{dupMatches.length} household{dupMatches.length > 1 ? 's' : ''} in this barangay already have
+				this head-of-family name:
+			</p>
+			<ul class="list-disc list-inside text-sm">
+				{#each dupMatches.slice(0, 5) as h (h._id)}
+					<li>
+						<a class="anchor" href="/dashboard/households/{h._id}" target="_blank" rel="noopener">
+							{h.fullName || `${h.firstName} ${h.lastName}`.trim()}
+						</a>
+					</li>
+				{/each}
+				{#if dupMatches.length > 5}
+					<li class="opacity-70">…and {dupMatches.length - 5} more</li>
+				{/if}
+			</ul>
+			<label class="flex items-center gap-2">
+				<input class="checkbox" type="checkbox" bind:checked={ackDuplicate} />
+				<span>This is a different family — add anyway.</span>
+			</label>
+		</div>
+	{/if}
+
 	<div class="flex justify-end gap-3 pt-2">
 		<button type="button" class="btn variant-soft" on:click={() => drawerStore.close()}>
 			Cancel
 		</button>
-		<button type="submit" class="btn variant-filled-success" disabled={isSubmitting}>
+		<button
+			type="submit"
+			class="btn variant-filled-success"
+			disabled={isSubmitting || (dupMatches.length > 0 && !ackDuplicate)}
+		>
 			{isSubmitting ? 'Saving...' : 'Save Household'}
 		</button>
 	</div>
