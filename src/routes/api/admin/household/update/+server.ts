@@ -6,6 +6,7 @@ import { encoderMayAccessBarangay } from '$lib/server/clusterAccess';
 import { syncFamilyLinks } from '$lib/server/familyLinks';
 import { parseCoord } from '$lib/utils/geo';
 import { canTagHouseholds } from '$lib/utils/roles';
+import { encoderTaggingEnabled } from '$lib/server/settings';
 
 export const POST: RequestHandler = async ({ request, locals }) => {
 	if (!locals.user) return json({ status: 'Error', error: 'Unauthorized' }, { status: 401 });
@@ -74,8 +75,14 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			...pickSurveyFields(data),
 			updatedBy: locals.user._id
 		};
-		// Only admins may change the tag; for others it's left untouched.
-		if (data.tag && canTagHouseholds(locals.user.role)) set.tag = data.tag;
+		// Admins may always change the tag; encoders only while the app-wide
+		// encoderTagging setting is on. For everyone else the field is silently
+		// left untouched — a rejected tag must never fail an otherwise-valid
+		// household edit. Fresh read: this is an enforcement point, not a render.
+		// `data.tag &&` short-circuits first, so a submit carrying no tag costs no
+		// settings read.
+		if (data.tag && canTagHouseholds(locals.user.role, await encoderTaggingEnabled({ fresh: true })))
+			set.tag = data.tag;
 
 		// Optimistic concurrency: only write if updatedAt still matches what the
 		// client loaded. Prevents one editor silently clobbering another's save.

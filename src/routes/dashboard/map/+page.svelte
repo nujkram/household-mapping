@@ -10,8 +10,13 @@
 
 	export let data: PageData;
 
-	// Only admins see political tags; others get a neutral, tag-free map.
-	const showTags = canTagHouseholds($page.data.user?.role);
+	// Admins always see political tags; encoders only while the app-wide
+	// encoderTagging setting is on. Everyone else gets a neutral, tag-free map.
+	// Reactive (`$:`, not `const`) so an invalidateAll() that changes the flag
+	// re-derives it, matching the other call sites. Note that markers already
+	// drawn keep their colors until the page remounts — getMarkerIcon() runs
+	// once per marker at creation.
+	$: showTags = canTagHouseholds($page.data.user?.role, $page.data.encoderTagging);
 	const NEUTRAL_COLOR = '#3B82F6';
 
 	let map: google.maps.Map;
@@ -42,6 +47,13 @@
 		clearTimeout(debounceTimer);
 		debounceTimer = setTimeout(fetchInView, delay);
 	};
+
+	// If tagging is switched off while a tag filter is active, the <select> is
+	// unmounted but `selectedTag` would keep narrowing the fetch invisibly.
+	$: if (!showTags && selectedTag) {
+		selectedTag = '';
+		scheduleFetch(0);
+	}
 
 	function getMarkerIcon(tag: string | null): google.maps.Symbol {
 		return {

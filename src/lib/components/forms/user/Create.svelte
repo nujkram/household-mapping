@@ -4,7 +4,9 @@
 	import { focusTrap, getToastStore } from '@skeletonlabs/skeleton';
 	import type { ToastSettings } from '@skeletonlabs/skeleton';
 	import { submitJson } from '$lib/utils/apiHelper';
-	import { CLUSTER_OPTIONS } from '$lib/utils/clusters';
+	import type { ScopeMode } from '$lib/utils/clusters';
+	import type { Barangay } from '$lib/utils/types';
+	import ScopeFields from './ScopeFields.svelte';
 
 	export const drawerStore = () => {};
 
@@ -19,8 +21,11 @@
 	let email: string;
 	let phone: string;
 	let cluster = '';
+	let scopeMode: ScopeMode = 'CLUSTER';
+	let barangayIds: string[] = [];
 
-	let stations: { id: string; name: string }[] = [];
+	// Selectable barangays for the "by assigned barangays" picker.
+	let barangays: Barangay[] = [];
 
 	// toast settings
 	const toastStore = getToastStore();
@@ -31,13 +36,12 @@
 
 	onMount(async (): Promise<void> => {
 		try {
-			const response: Response = await fetch('/api/admin/barangay');
-			const result: { data: { id: string; name: string }[] } = await response.json();
-
-			stations = result.response;
+			const response = await fetch('/api/admin/barangay');
+			const result: { response: Barangay[] } = await response.json();
+			barangays = result.response ?? [];
 		} catch (error) {
-			console.error('Error fetching stations:', error);
-			stations = []; // Ensure stations is an empty array if fetch fails
+			console.error('Error fetching barangays:', error);
+			barangays = [];
 		}
 	});
 </script>
@@ -66,7 +70,9 @@
 				email,
 				phone,
 				role,
-				cluster
+				cluster,
+				scopeMode,
+				barangayIds
 			});
 
 			toastSettings.message = result.message;
@@ -132,21 +138,12 @@
 		<span>Role</span>
 		<select class="select" bind:value={role} required>
 			<option value="ADMINISTRATOR">Administrator — full access</option>
-			<option value="ENCODER">Encoder — tags & edits households</option>
+			<option value="ENCODER">Encoder — edits households (tagging set in Settings)</option>
 			<option value="GRANT_OFFICER">Grant Officer — awards grants</option>
 		</select>
 	</label>
 	{#if role === 'ENCODER'}
-		<label class="label mt-4">
-			<span>Assigned Cluster</span>
-			<select class="select" bind:value={cluster}>
-				<option value="">All clusters (no restriction)</option>
-				{#each CLUSTER_OPTIONS as c}
-					<option value={c.value}>{c.label}</option>
-				{/each}
-			</select>
-			<span class="text-xs opacity-60">Encoder will only see households in this cluster.</span>
-		</label>
+		<ScopeFields bind:scopeMode bind:cluster bind:barangayIds {barangays} />
 	{/if}
 	<hr class="mt-4" />
 	<label class="label mt-4">

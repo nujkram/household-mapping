@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import clientPromise from '$lib/server/mongo';
-import { scopedClusterFor, barangayIdsInCluster } from '$lib/server/clusterAccess';
+import { allowedBarangayIdsFor } from '$lib/server/clusterAccess';
 
 // Hard cap so a zoomed-out viewport can't ship the whole collection.
 const CAP = 2000;
@@ -32,10 +32,11 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 		{ lng: { $gte: swLng, $lte: neLng } }
 	];
 
-	// Encoder cluster scope — same enforcement as the list/detail pages.
-	const cluster = scopedClusterFor(locals.user);
-	if (cluster) {
-		clauses.push({ barangayId: { $in: await barangayIdsInCluster(db, cluster) } });
+	// Encoder scope (cluster or assigned barangays) — same enforcement as the
+	// list/detail pages. An empty allow-list matches nothing, as intended.
+	const allowed = await allowedBarangayIdsFor(db, locals.user);
+	if (allowed) {
+		clauses.push({ barangayId: { $in: allowed } });
 	}
 
 	// Optional filters mirrored from the map UI.

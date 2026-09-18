@@ -3,6 +3,7 @@ import type { RequestHandler } from './$types';
 import clientPromise from '$lib/server/mongo';
 import { canTagHouseholds } from '$lib/utils/roles';
 import { encoderMayAccessBarangay } from '$lib/server/clusterAccess';
+import { encoderTaggingEnabled } from '$lib/server/settings';
 
 // Define the valid tag values
 type HouseholdTag = 'APIN' | 'KONTRA' | 'UNTAGGED';
@@ -12,11 +13,17 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		const { householdId, tag } = await request.json();
 
 		// Real HTTP status codes so callers' `response.ok` checks work.
-		// Only administrators may set the political tag (the hook guard also
-		// restricts this route to admins).
+		//
+		// The hook guard now admits ENCODERs to this route, so THIS check is the
+		// only thing enforcing the app-wide switch. Read it FRESH — never from the
+		// TTL cache — so an encoder can't slip a write through in the window after
+		// an admin turns tagging off. Admins bypass the flag entirely.
+		//
+		// `!user ||` short-circuits ahead of the read, so an anonymous request
+		// never costs a findOne.
 		const user = locals.user;
-		if (!user || !canTagHouseholds(user.role)) {
-			return json({ error: 'Unauthorized' }, { status: 403 });
+		if (!user || !canTagHouseholds(user.role, await encoderTaggingEnabled({ fresh: true }))) {
+			return json({ error: 'Household tagging is not enabled for your role' }, { status: 403 });
 		}
 
 		if (!householdId) {

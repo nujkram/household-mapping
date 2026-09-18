@@ -2,6 +2,7 @@ import { redirect, type Handle, type HandleServerError } from '@sveltejs/kit';
 import clientPromise from '$lib/server/mongo';
 import { hashSessionToken } from '$lib/server/auth';
 import { ROLES, type Role } from '$lib/utils/roles';
+import { normalizeScopeMode } from '$lib/utils/clusters';
 import { dev } from '$app/environment';
 
 const jsonError = (status: number, message: string): Response =>
@@ -22,10 +23,13 @@ const ROUTE_ROLES: [prefix: string, roles: Role[]][] = [
 	// APIs
 	['/api/admin/user', ADMIN_ONLY],
 	['/api/admin/upload', ADMIN_ONLY],
+	['/api/admin/settings', ADMIN_ONLY],
 	['/api/admin/barangay/insert', ADMIN_ONLY],
 	['/api/admin/barangay/update', ADMIN_ONLY],
 	['/api/admin/household/grant', GRANT_MANAGERS],
-	['/api/admin/household/set-tag', ADMIN_ONLY],
+	// Encoders are admitted here; whether they may ACTUALLY tag depends on the
+	// app-wide encoderTagging setting, enforced inside the handler.
+	['/api/admin/household/set-tag', HOUSEHOLD_EDITORS],
 	['/api/admin/household/insert', HOUSEHOLD_EDITORS],
 	['/api/admin/household/update', HOUSEHOLD_EDITORS],
 	['/api/admin/household/list', HOUSEHOLD_EDITORS],
@@ -35,6 +39,7 @@ const ROUTE_ROLES: [prefix: string, roles: Role[]][] = [
 	// Pages
 	['/dashboard/users', ADMIN_ONLY],
 	['/dashboard/upload', ADMIN_ONLY],
+	['/dashboard/settings', ADMIN_ONLY],
 	['/dashboard/barangays', ADMIN_ONLY],
 	['/dashboard/grants', GRANT_MANAGERS],
 	['/dashboard/map', HOUSEHOLD_EDITORS]
@@ -75,7 +80,12 @@ export const handle: Handle = async ({ event, resolve }) => {
 				lastName: user?.lastName,
 				role: user?.role,
 				username: user?.username,
-				cluster: user?.cluster ?? ''
+				cluster: user?.cluster ?? '',
+				// Normalized here so nothing downstream has to handle junk: a legacy
+				// account with neither field set reads as CLUSTER + '' = unrestricted,
+				// exactly as it behaved before barangay scoping existed.
+				scopeMode: normalizeScopeMode(user?.scopeMode),
+				barangayIds: Array.isArray(user?.barangayIds) ? (user.barangayIds as string[]) : []
 			};
 		}
 	}

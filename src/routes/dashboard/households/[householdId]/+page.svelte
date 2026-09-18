@@ -36,7 +36,7 @@
 	$: userRole = $page.data.user?.role;
 	$: canEdit = canEditHouseholds(userRole);
 	$: canGrant = canManageGrants(userRole);
-	$: canTag = canTagHouseholds(userRole);
+	$: canTag = canTagHouseholds(userRole, $page.data.encoderTagging);
 
 	// Aggregation results are driver `Document`s; this app uses string _ids.
 	$: household = data.household as any;

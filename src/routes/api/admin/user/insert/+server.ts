@@ -4,6 +4,7 @@ import { id } from '$lib/common/utils';
 import { hashPassword } from '$lib/server/auth';
 import clientPromise from '$lib/server/mongo';
 import { userInsertSchema, badRequest } from '$lib/server/validation';
+import { scopeFieldsForUser } from '$lib/server/clusterAccess';
 
 export const POST: RequestHandler = async ({ request, locals }) => {
 	if (!locals.user) return json({ status: 'Error', error: 'Unauthorized' }, { status: 401 });
@@ -20,6 +21,16 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	if (await User.findOne({ username: data.username }, { projection: { _id: 1 } })) {
 		return json({ status: 'Error', error: 'Username already exists' }, { status: 409 });
 	}
+
+	// Geographic scoping only applies to encoders; the unused mode's field is
+	// stored empty rather than left absent.
+	const scope = await scopeFieldsForUser(
+		db,
+		data.role,
+		data.scopeMode,
+		data.cluster,
+		data.barangayIds
+	);
 
 	const now = new Date();
 	const user = {
@@ -41,8 +52,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		isFake: false,
 		// Validated against the role whitelist by userInsertSchema.
 		role: data.role,
-		// Cluster scoping only applies to encoders.
-		cluster: data.role === 'ENCODER' ? data.cluster : '',
+		...scope,
 		createdBy: locals.user._id,
 		updatedBy: locals.user._id
 	};

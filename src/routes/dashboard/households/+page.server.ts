@@ -1,8 +1,9 @@
 import { error } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 import clientPromise from '$lib/server/mongo';
-import { scopedClusterFor } from '$lib/server/clusterAccess';
-import { resolveClusterId, isClusterId } from '$lib/utils/clusters';
+import { scopedClusterFor, allowedBarangayIdsFor } from '$lib/server/clusterAccess';
+import { resolveClusterId, isClusterId, normalizeScopeMode } from '$lib/utils/clusters';
+import { ROLES } from '$lib/utils/roles';
 
 const DEFAULT_LIMIT = 20;
 
@@ -22,6 +23,9 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 	// An encoder scoped to a cluster is locked to it; everyone else may choose
 	// a cluster via the URL filter.
 	const lockedCluster = scopedClusterFor(locals.user);
+	// Only an ENCODER is ever scoped; everyone else browses unrestricted.
+	const scopeMode =
+		locals.user?.role === ROLES.ENCODER ? normalizeScopeMode(locals.user.scopeMode) : 'CLUSTER';
 	const requestedCluster = url.searchParams.get('cluster') ?? '';
 	const cluster = lockedCluster ?? (isClusterId(requestedCluster) ? requestedCluster : '');
 
@@ -41,18 +45,24 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 			.sort({ name: 1 })
 			.toArray();
 
-		// Barangay ids belonging to the active cluster (if any).
+		// Barangay ids belonging to the active cluster (if any). This is the
+		// optional URL filter, not the security boundary.
 		const clusterBarangayIds = cluster
 			? allBarangays.filter((b: any) => resolveClusterId(b) === cluster).map((b: any) => b._id)
 			: null;
 
-		// A scoped encoder only ever sees their cluster's barangays in dropdowns.
-		const barangays = lockedCluster
-			? allBarangays.filter((b: any) => resolveClusterId(b) === lockedCluster)
+		// The hard scope: what this user may see at all, however they're scoped.
+		const allowedIds = await allowedBarangayIdsFor(db, locals.user);
+
+		// A scoped encoder only ever sees their own barangays in the dropdowns.
+		const barangays = allowedIds
+			? allBarangays.filter((b: any) => allowedIds.includes(b._id))
 			: allBarangays;
 
 		// Build the query — the DB does filtering/sorting/pagination.
 		const clauses: Record<string, unknown>[] = [{ isActive: true }];
+		// Scope first, then the user's own optional cluster filter on top.
+		if (allowedIds) clauses.push({ barangayId: { $in: allowedIds } });
 		if (clusterBarangayIds) clauses.push({ barangayId: { $in: clusterBarangayIds } });
 		if (q) {
 			const pattern = escapeRegex(q);
@@ -144,7 +154,12 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 			sort,
 			dir: dir === 1 ? 'asc' : 'desc',
 			cluster,
-			lockedCluster: lockedCluster ?? ''
+			lockedCluster: lockedCluster ?? '',
+			// Barangay-scoped encoders get a count instead of a cluster name, and
+			// the cluster dropdown is hidden for them (it can only confuse — their
+			// scope doesn't follow cluster lines).
+			lockedBarangayCount: scopeMode === 'BARANGAYS' ? (allowedIds?.length ?? 0) : 0,
+			isBarangayScoped: scopeMode === 'BARANGAYS'
 		};
 	} catch (err) {
 		console.error('Error loading households:', err);

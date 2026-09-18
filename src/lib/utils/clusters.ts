@@ -63,6 +63,21 @@ for (const [alias, official] of Object.entries(BARANGAY_NAME_ALIASES)) {
 
 export const CLUSTER_OPTIONS = CLUSTERS.map((c) => ({ value: c.id, label: c.label }));
 
+/**
+ * How an encoder's access is scoped:
+ *  - CLUSTER   → the cluster on their account (empty cluster = no restriction)
+ *  - BARANGAYS → an explicit list of barangay ids on their account
+ *
+ * The two are mutually exclusive: whichever mode is not selected has its field
+ * cleared on save, so stale data can never widen access later.
+ */
+export const SCOPE_MODES = ['CLUSTER', 'BARANGAYS'] as const;
+export type ScopeMode = (typeof SCOPE_MODES)[number];
+
+/** Normalize any stored value to a known mode; legacy accounts default to CLUSTER. */
+export const normalizeScopeMode = (mode: string | null | undefined): ScopeMode =>
+	mode === 'BARANGAYS' ? 'BARANGAYS' : 'CLUSTER';
+
 /** Cluster id a barangay name belongs to, or null if unassigned. */
 export const clusterIdForBarangay = (name: string | null | undefined): string | null =>
 	NAME_TO_CLUSTER.get(norm(name)) ?? null;
