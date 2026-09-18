@@ -42,12 +42,13 @@
 		barangays: Barangay[];
 		households: HouseholdCoordinate[];
 		tagCounts: { APIN: number; KONTRA: number; UNTAGGED: number };
+		encoderTagging: boolean;
 		activeGrants: number;
 		analytics: Analytics | null;
 	};
 
 	export let data: PageData;
-	const { user, barangays, households, tagCounts, activeGrants, analytics } = data;
+	const { user, barangays, households, tagCounts, encoderTagging, activeGrants, analytics } = data;
 
 	const isAdminView = user.role === ROLES.ADMINISTRATOR;
 	const isEncoderView = user.role === ROLES.ENCODER;
@@ -64,6 +65,7 @@
 	const pctLabel = (part: number, whole: number): string => `${Math.round(pct(part, whole))}%`;
 
 	const taggedCount = tagCounts.APIN + tagCounts.KONTRA;
+	const totalHouseholds = tagCounts.APIN + tagCounts.KONTRA + tagCounts.UNTAGGED;
 
 	let mapElement: HTMLElement;
 	let map: google.maps.Map;
@@ -269,12 +271,20 @@
 				<h1 class="h2">Welcome, {user.firstName || user.name}!</h1>
 				<p class="opacity-70 mt-1">
 					{#if isEncoderView}
-						Your job: keep household records complete and correct.
+						{encoderTagging
+							? 'Your job: keep household records correct and tagged.'
+							: 'Your job: keep household records complete and correct.'}
 					{:else}
 						Your job: award grants to the right households.
 					{/if}
 				</p>
 			</header>
+
+			{#if isEncoderView && encoderTagging && tagCounts.UNTAGGED > 0}
+				<p class="opacity-70">
+					{tagCounts.UNTAGGED} of {totalHouseholds} households still need a tag.
+				</p>
+			{/if}
 
 			<!-- Big task buttons -->
 			<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -282,7 +292,11 @@
 					<a href="/dashboard/households" class="card p-8 variant-filled-primary text-center hover:brightness-110">
 						<p class="text-4xl mb-2">🏠</p>
 						<p class="text-xl font-bold text-white">Households</p>
-						<p class="text-white/80 mt-1">Edit details, location & dependents</p>
+						<p class="text-white/80 mt-1">
+							{encoderTagging
+								? 'Tag, edit details, location & dependents'
+								: 'Edit details, location & dependents'}
+						</p>
 					</a>
 					<a href="/dashboard/map" class="card p-8 variant-filled-secondary text-center hover:brightness-110">
 						<p class="text-4xl mb-2">🗺️</p>
@@ -312,6 +326,9 @@
 					{#if isEncoderView}
 						<li>Press <strong>Households</strong> above.</li>
 						<li>Find a family using the search box.</li>
+						{#if encoderTagging}
+							<li>Press the colored tag button to set APIN, KONTRA, or UNTAGGED.</li>
+						{/if}
 						<li>Press <strong>Update</strong> to fix names, location, or dependents.</li>
 						<li>Press <strong>Add Household</strong> to register a new family.</li>
 					{:else}

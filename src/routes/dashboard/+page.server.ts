@@ -5,6 +5,7 @@ import { ROLES } from '$lib/utils/roles';
 import { CLUSTERS, resolveClusterId } from '$lib/utils/clusters';
 import { NUMERIC_STRING } from '$lib/utils/geo';
 import clientPromise from '$lib/server/mongo';
+import { encoderTaggingEnabled } from '$lib/server/settings';
 
 type HouseholdDocument = {
 	latitude: string;
@@ -29,9 +30,15 @@ export const load: PageServerLoad = async ({ locals }) => {
 	const db = await clientPromise();
 	const Household = db.collection('households');
 
+	// Gates the encoder-facing tagging copy below. Admins always tag.
+	const encoderTagging = await encoderTaggingEnabled();
+
 	// Tag counts are cheap and useful to every role.
+	// TODO: not cluster-scoped — a cluster-bound encoder sees global counts.
 	const tagGroups = (await Household.aggregate(
 		[
+			// Match the admin KPI facet below, which also counts active only.
+			{ $match: { isActive: true } },
 			{
 				$group: {
 					_id: { $ifNull: ['$tag', 'UNTAGGED'] },
@@ -62,6 +69,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 		return {
 			user: locals.user as SessionUser,
 			tagCounts,
+			encoderTagging,
 			activeGrants,
 			barangays: [] as Barangay[],
 			households: [] as HouseholdCoordinate[],
@@ -249,6 +257,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 		barangays: barangays as unknown as Barangay[],
 		households: householdCoordinates,
 		tagCounts,
+		encoderTagging,
 		activeGrants,
 		analytics
 	};

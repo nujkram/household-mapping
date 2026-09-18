@@ -7,7 +7,8 @@
 		Tag,
 		PersonBadge,
 		People,
-		CashStack
+		CashStack,
+		Gear
 	} from '$lib/components/icons/index';
 	import { canEditHouseholds, canManageGrants, isAdmin } from '$lib/utils/roles';
 
@@ -101,5 +102,17 @@
 			</div>
 		</svelte:fragment>
 		<span>Users</span>
+	</AppRailAnchor>
+	<AppRailAnchor
+		title="Settings"
+		href="/dashboard/settings"
+		selected={$page.url.pathname === '/dashboard/settings'}
+	>
+		<svelte:fragment slot="lead">
+			<div class="flex items-center justify-center">
+				<Gear />
+			</div>
+		</svelte:fragment>
+		<span>Settings</span>
 	</AppRailAnchor>
 {/if}

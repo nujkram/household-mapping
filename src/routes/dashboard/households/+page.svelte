@@ -28,6 +28,8 @@
 		dir: string;
 		cluster: string;
 		lockedCluster: string;
+		lockedBarangayCount: number;
+		isBarangayScoped: boolean;
 	}
 
 	export let data: PageData;
@@ -48,7 +50,9 @@
 	let sortDirection = data.dir;
 
 	// A cluster-scoped encoder can't change cluster; the dropdown is hidden.
-	$: isClusterLocked = Boolean(data.lockedCluster);
+	// A barangay-scoped one has no cluster at all, so it's hidden for them too —
+	// their barangay list doesn't follow cluster lines.
+	$: isClusterLocked = Boolean(data.lockedCluster) || data.isBarangayScoped;
 
 	// Barangay dropdown narrows to the chosen cluster (data.barangays is already
 	// limited to a locked encoder's cluster server-side).
@@ -67,15 +71,24 @@
 		applyFilters();
 	};
 
-	// Role-based capabilities. Encoders edit household data but only admins set
-	// the political tag; Grant Officers award grants/services.
+	// Role-based capabilities. Encoders edit household data; they set the
+	// political tag only while the app-wide encoderTagging setting is on (admins
+	// always can). Grant Officers award grants/services.
 	$: userRole = $page.data.user?.role;
 	$: canEdit = canEditHouseholds(userRole);
-	$: canTag = canTagHouseholds(userRole);
+	$: canTag = canTagHouseholds(userRole, $page.data.encoderTagging);
 	$: canGrant = canManageGrants(userRole);
 	// Column count for skeleton/empty colspans: Name, Barangay, Phone, Last
-	// Updated, Actions (5) + Tag (admin) + Grants & Services (grant managers).
+	// Updated, Actions (5) + Tag (admin, or encoder when enabled) + Grants &
+	// Services (grant managers).
 	$: colCount = 5 + (canTag ? 1 : 0) + (canGrant ? 2 : 0);
+
+	// A hidden filter is a confusing filter: if tagging isn't visible to this
+	// user, drop any tag filter carried in from the URL.
+	$: if (!canTag && selectedTag) {
+		selectedTag = '';
+		applyFilters();
+	}
 
 	// Selected household for updates / grant awards
 	let selectedHousehold: Household | undefined;
@@ -240,7 +253,20 @@
 			{/if}
 		</header>
 
-		{#if isClusterLocked}
+		{#if data.isBarangayScoped}
+			<p class="px-4 pt-2 text-sm opacity-70">
+				{#if data.lockedBarangayCount > 0}
+					Showing households in your
+					<strong
+						>{data.lockedBarangayCount} assigned barangay{data.lockedBarangayCount === 1
+							? ''
+							: 's'}</strong
+					>.
+				{:else}
+					No barangays are assigned to your account yet — ask an administrator to assign some.
+				{/if}
+			</p>
+		{:else if isClusterLocked}
 			<p class="px-4 pt-2 text-sm opacity-70">
 				Showing households in <strong>{clusterLabel(data.lockedCluster)}</strong> (your assigned cluster).
 			</p>

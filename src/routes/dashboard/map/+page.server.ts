@@ -1,7 +1,7 @@
 import { error } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 import clientPromise from '$lib/server/mongo';
-import { scopedClusterFor, barangayIdsInCluster } from '$lib/server/clusterAccess';
+import { allowedBarangayIdsFor } from '$lib/server/clusterAccess';
 import { ROLES } from '$lib/utils/roles';
 import { NUMERIC_STRING } from '$lib/utils/geo';
 
@@ -12,8 +12,10 @@ export const ssr = false;
 export const load: PageServerLoad = async ({ locals }) => {
 	try {
 		const db = await clientPromise();
-		const cluster = scopedClusterFor(locals.user);
-		const scope = cluster ? { _id: { $in: await barangayIdsInCluster(db, cluster) } } : {};
+		// Whichever way the encoder is scoped (cluster or an explicit barangay
+		// list), this is the set they may see. `[]` matches nothing by design.
+		const allowed = await allowedBarangayIdsFor(db, locals.user);
+		const scope = allowed ? { _id: { $in: allowed } } : {};
 
 		const barangays = await db
 			.collection('barangays')

@@ -18,8 +18,10 @@
 	/** Called after a successful update so the parent page can refresh its list. */
 	export let onSuccess: (() => void) | undefined = undefined;
 
-	// Only administrators may set the political tag.
-	$: canTag = canTagHouseholds($page.data.user?.role);
+	// Admins always; encoders only while the app-wide encoderTagging setting is
+	// on. When false the Tag <select> isn't rendered, so no `tag` is submitted
+	// and the server leaves the stored value untouched.
+	$: canTag = canTagHouseholds($page.data.user?.role, $page.data.encoderTagging);
 
 	const isFocused = true;
 	let isSubmitting = false;

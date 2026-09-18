@@ -228,6 +228,17 @@ export const serviceUpdateSchema = serviceInsertSchema.extend({
 const roleField = z.enum(['ADMINISTRATOR', 'ENCODER', 'GRANT_OFFICER']);
 // Optional cluster assignment (meaningful for encoders); '' = all clusters.
 const clusterField = z.enum(['CLUSTER_1', 'CLUSTER_2', 'CLUSTER_3']).or(z.literal('')).optional().default('');
+// How an encoder is scoped. Legacy payloads omit it and default to CLUSTER, so
+// existing accounts keep behaving exactly as before.
+const scopeModeField = z.enum(['CLUSTER', 'BARANGAYS']).optional().default('CLUSTER');
+// Explicit barangay assignment, used only in BARANGAYS mode. Ids are deduped
+// here; the endpoints additionally drop any that no longer exist.
+const barangayIdsField = z
+	.array(z.string().trim().min(1))
+	.max(500)
+	.optional()
+	.default([])
+	.transform((ids) => [...new Set(ids)]);
 
 export const userInsertSchema = z.object({
 	username: z.string().trim().min(1),
@@ -243,7 +254,9 @@ export const userInsertSchema = z.object({
 		.refine((v) => v.includes('@'), 'must be a valid email'),
 	phone,
 	role: roleField,
-	cluster: clusterField
+	cluster: clusterField,
+	scopeMode: scopeModeField,
+	barangayIds: barangayIdsField
 });
 
 export const userUpdateSchema = z.object({
@@ -253,6 +266,8 @@ export const userUpdateSchema = z.object({
 	phone,
 	role: roleField,
 	cluster: clusterField,
+	scopeMode: scopeModeField,
+	barangayIds: barangayIdsField,
 	// Whether the account can log in. Defaults to active if omitted.
 	isActive: z.coerce.boolean().optional().default(true)
 });
@@ -260,6 +275,17 @@ export const userUpdateSchema = z.object({
 export const resetPasswordSchema = z.object({
 	_id: z.string().min(1),
 	password: z.string().min(1)
+});
+
+// --- App settings -----------------------------------------------------------
+
+export const settingsUpdateSchema = z.object({
+	/**
+	 * May ENCODERs view and set the political tag? Admins always may.
+	 * Strict boolean, not z.coerce.boolean() — so a stringy `"false"` is a 400
+	 * rather than a silent `true`.
+	 */
+	encoderTagging: z.boolean()
 });
 
 // --- Helper -----------------------------------------------------------------

@@ -2,11 +2,18 @@
 	import type { Household } from '$lib/utils/types';
 	import { calculateAge } from '$lib/common/utils';
 	import { getToastStore } from '@skeletonlabs/skeleton';
+	import { page } from '$app/stores';
 	import { debounce } from '$lib/utils/debounce';
+	import { canTagHouseholds } from '$lib/utils/roles';
 
 	export let data: Household[] = [];
 	export let handleClickView: (item: Household) => void;
 	export let handleClickUpdate: (item: Household) => void;
+
+	// This component had no role guard — it was safe only because /dashboard/
+	// barangays is ADMIN_ONLY. The endpoint it posts to is no longer admin-only,
+	// so guard the UI here too rather than rely on the page prefix.
+	$: canTag = canTagHouseholds($page.data.user?.role, $page.data.encoderTagging);
 
 	const toastStore = getToastStore();
 	let selectedHousehold: any = null;
@@ -102,15 +109,17 @@
 	</div>
 
 	<!-- Tag filter -->
-	<select
-		bind:value={selectedTag}
-		class="select"
-	>
-		<option value="">All Tags</option>
-		<option value="APIN">APIN</option>
-		<option value="KONTRA">KONTRA</option>
-		<option value="UNTAGGED">UNTAGGED</option>
-	</select>
+	{#if canTag}
+		<select
+			bind:value={selectedTag}
+			class="select"
+		>
+			<option value="">All Tags</option>
+			<option value="APIN">APIN</option>
+			<option value="KONTRA">KONTRA</option>
+			<option value="UNTAGGED">UNTAGGED</option>
+		</select>
+	{/if}
 </div>
 
 <div class="table-container">
@@ -123,14 +132,16 @@
 				<th>Age</th>
 				<th>Phone</th>
 				<th>Dependents</th>
-				<th>Tag</th>
+				{#if canTag}
+					<th>Tag</th>
+				{/if}
 				<th class="text-center">Actions</th>
 			</tr>
 		</thead>
 		<tbody>
 			{#if filteredHouseholds.length === 0}
 				<tr>
-					<td colspan="8" class="text-center py-8 opacity-60">
+					<td colspan={canTag ? 8 : 7} class="text-center py-8 opacity-60">
 						{#if (data?.length ?? 0) === 0}
 							No households in this barangay yet.
 						{:else}
@@ -147,7 +158,8 @@
 					<td>{calculateAge(item.dateOfBirth) || ''}</td>
 					<td>{item.phone || ''}</td>
 					<td>{item.dependents || ''}</td>
-					<td>
+					{#if canTag}
+						<td>
 						<div class="relative tag-dropdown">
 							<button
 								class="btn btn-sm {item.tag === 'UNTAGGED'
@@ -198,7 +210,8 @@
 								</div>
 							{/if}
 						</div>
-					</td>
+						</td>
+					{/if}
 					<td>
 						<div class="flex flex-row gap-2 items-center justify-center">
 							<button

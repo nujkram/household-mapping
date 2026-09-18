@@ -1,3 +1,5 @@
+import type { ScopeMode } from './clusters';
+
 export type Barangay = {
 	_id: string;
 	name: string;
@@ -96,6 +98,16 @@ export type SessionUser = {
 	username: string;
 	/** For encoders: the cluster id they're scoped to (empty = all). */
 	cluster?: string;
+	/**
+	 * For encoders: which scoping rule applies — the assigned `cluster`, or the
+	 * explicit `barangayIds` list. Defaults to CLUSTER for legacy accounts.
+	 */
+	scopeMode?: ScopeMode;
+	/**
+	 * For encoders in BARANGAYS mode: the barangay ids they may act on.
+	 * Empty means no access at all — an unconfigured account fails closed.
+	 */
+	barangayIds?: string[];
 };
 
 export type Grant = {

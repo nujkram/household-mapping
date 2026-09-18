@@ -2,6 +2,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import clientPromise from '$lib/server/mongo';
 import { userUpdateSchema, badRequest } from '$lib/server/validation';
+import { scopeFieldsForUser } from '$lib/server/clusterAccess';
 
 export const POST: RequestHandler = async ({ request, locals }) => {
 	if (!locals.user) return json({ status: 'Error', error: 'Unauthorized' }, { status: 401 });
@@ -21,6 +22,16 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	const db = await clientPromise();
 	const User = db.collection('users');
 
+	// Clears whichever scoping field isn't in use, so switching modes can't leave
+	// stale data behind that widens access later.
+	const scope = await scopeFieldsForUser(
+		db,
+		data.role,
+		data.scopeMode,
+		data.cluster,
+		data.barangayIds
+	);
+
 	const result = await User.updateOne(
 		{ _id: data._id },
 		{
@@ -34,8 +45,8 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				isActive: data.isActive,
 				// Validated against the role whitelist by userUpdateSchema.
 				role: data.role,
-				// Cluster scoping only applies to encoders.
-				cluster: data.role === 'ENCODER' ? data.cluster : '',
+				// Geographic scoping only applies to encoders.
+				...scope,
 				updatedBy: locals.user._id
 			}
 		}
