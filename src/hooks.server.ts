@@ -11,10 +11,13 @@ const jsonError = (status: number, message: string): Response =>
 		headers: { 'content-type': 'application/json' }
 	});
 
-const ALL_ROLES: Role[] = [ROLES.ADMINISTRATOR, ROLES.ENCODER, ROLES.GRANT_OFFICER];
+const ALL_ROLES: Role[] = [ROLES.ADMINISTRATOR, ROLES.ENCODER, ROLES.GRANT_OFFICER, ROLES.TAGGER];
 const ADMIN_ONLY: Role[] = [ROLES.ADMINISTRATOR];
 const HOUSEHOLD_EDITORS: Role[] = [ROLES.ADMINISTRATOR, ROLES.ENCODER];
 const GRANT_MANAGERS: Role[] = [ROLES.ADMINISTRATOR, ROLES.GRANT_OFFICER];
+const MAPPING_FILLERS: Role[] = [ROLES.ADMINISTRATOR, ROLES.TAGGER];
+// Everyone who links member rows to existing household records.
+const HOUSEHOLD_LINKERS: Role[] = [ROLES.ADMINISTRATOR, ROLES.ENCODER, ROLES.TAGGER];
 
 // Route permissions, most specific prefix first — the first match wins.
 // Anything under /dashboard or /api/admin not listed here falls back to
@@ -32,8 +35,13 @@ const ROUTE_ROLES: [prefix: string, roles: Role[]][] = [
 	['/api/admin/household/set-tag', HOUSEHOLD_EDITORS],
 	['/api/admin/household/insert', HOUSEHOLD_EDITORS],
 	['/api/admin/household/update', HOUSEHOLD_EDITORS],
-	['/api/admin/household/list', HOUSEHOLD_EDITORS],
+	['/api/admin/household/list', HOUSEHOLD_LINKERS],
+	// Taggers' Household Mapping sheet. Must stay ABOVE '/api/admin/household/map':
+	// prefixes match with startsWith, and '/mapping' starts with '/map'.
+	['/api/admin/household/mapping', MAPPING_FILLERS],
 	['/api/admin/household/map', HOUSEHOLD_EDITORS],
+	// Read-only active-grant list for the Household Mapping sheet's "Services Availed".
+	['/api/admin/grant/options', ALL_ROLES],
 	['/api/admin/grant', GRANT_MANAGERS],
 	['/api/admin/service', GRANT_MANAGERS],
 	// Pages

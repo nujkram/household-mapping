@@ -3,7 +3,7 @@ import type { PageServerLoad } from './$types';
 import clientPromise from '$lib/server/mongo';
 import { scopedClusterFor, allowedBarangayIdsFor } from '$lib/server/clusterAccess';
 import { resolveClusterId, isClusterId, normalizeScopeMode } from '$lib/utils/clusters';
-import { ROLES } from '$lib/utils/roles';
+import { isScopedRole } from '$lib/utils/roles';
 
 const DEFAULT_LIMIT = 20;
 
@@ -23,9 +23,10 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 	// An encoder scoped to a cluster is locked to it; everyone else may choose
 	// a cluster via the URL filter.
 	const lockedCluster = scopedClusterFor(locals.user);
-	// Only an ENCODER is ever scoped; everyone else browses unrestricted.
-	const scopeMode =
-		locals.user?.role === ROLES.ENCODER ? normalizeScopeMode(locals.user.scopeMode) : 'CLUSTER';
+	// Only encoders and taggers are ever scoped; everyone else browses unrestricted.
+	const scopeMode = isScopedRole(locals.user?.role)
+		? normalizeScopeMode(locals.user?.scopeMode)
+		: 'CLUSTER';
 	const requestedCluster = url.searchParams.get('cluster') ?? '';
 	const cluster = lockedCluster ?? (isClusterId(requestedCluster) ? requestedCluster : '');
 
@@ -121,10 +122,7 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 								// Centavos; legacy float peso records fall back to ×100.
 								total: {
 									$sum: {
-										$ifNull: [
-											'$amountCentavos',
-											{ $multiply: [{ $ifNull: ['$amount', 0] }, 100] }
-										]
+										$ifNull: ['$amountCentavos', { $multiply: [{ $ifNull: ['$amount', 0] }, 100] }]
 									}
 								}
 							}

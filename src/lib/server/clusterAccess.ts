@@ -1,6 +1,6 @@
 import type { Db } from 'mongodb';
 import type { SessionUser } from '$lib/utils/types';
-import { ROLES } from '$lib/utils/roles';
+import { isScopedRole } from '$lib/utils/roles';
 import {
 	barangayNamesInCluster,
 	isClusterId,
@@ -16,13 +16,13 @@ import {
 export const NO_CLUSTER = '__NONE__';
 
 /**
- * The cluster an encoder is scoped to.
- *  - null  → unrestricted (admins, grant officers, and encoders with cluster '')
+ * The cluster an encoder or tagger is scoped to.
+ *  - null  → unrestricted (admins, grant officers, and encoders/taggers with cluster '')
  *  - valid id → scoped to that cluster
  *  - NO_CLUSTER → encoder has an unrecognized cluster → deny everything
  */
 export const scopedClusterFor = (user: SessionUser | null): string | null => {
-	if (user?.role !== ROLES.ENCODER) return null;
+	if (!user || !isScopedRole(user.role)) return null;
 	// Scoped by an explicit barangay list instead — no cluster lock applies.
 	if (normalizeScopeMode(user.scopeMode) === 'BARANGAYS') return null;
 	const c = user.cluster;
@@ -36,7 +36,9 @@ export const scopedClusterFor = (user: SessionUser | null): string | null => {
  */
 export const barangayIdsInCluster = async (db: Db, clusterId: string): Promise<string[]> => {
 	const names = barangayNamesInCluster(clusterId);
-	const noStoredCluster = { $or: [{ cluster: { $exists: false } }, { cluster: null }, { cluster: '' }] };
+	const noStoredCluster = {
+		$or: [{ cluster: { $exists: false } }, { cluster: null }, { cluster: '' }]
+	};
 	const rows = await db
 		.collection('barangays')
 		.aggregate([
@@ -74,7 +76,7 @@ export const allowedBarangayIdsFor = async (
 	db: Db,
 	user: SessionUser | null
 ): Promise<string[] | null> => {
-	if (user?.role !== ROLES.ENCODER) return null;
+	if (!user || !isScopedRole(user.role)) return null;
 
 	if (normalizeScopeMode(user.scopeMode) === 'BARANGAYS') {
 		return Array.isArray(user.barangayIds) ? user.barangayIds : [];
@@ -90,7 +92,7 @@ export const allowedBarangayIdsFor = async (
  * The scoping fields to persist on a user document.
  *
  * Two invariants, both enforced here rather than at each call site:
- *  - Non-encoders are stored unscoped — scoping only means anything for encoders.
+ *  - Other roles are stored unscoped — scoping only means anything for encoders and taggers.
  *  - The field for the mode NOT in use is cleared, so a stale cluster (or a stale
  *    barangay list) can never widen access after an admin switches modes.
  *
@@ -104,7 +106,7 @@ export const scopeFieldsForUser = async (
 	cluster: string,
 	barangayIds: string[]
 ): Promise<{ cluster: string; scopeMode: ScopeMode; barangayIds: string[] }> => {
-	if (role !== ROLES.ENCODER) return { cluster: '', scopeMode: 'CLUSTER', barangayIds: [] };
+	if (!isScopedRole(role)) return { cluster: '', scopeMode: 'CLUSTER', barangayIds: [] };
 
 	if (scopeMode === 'BARANGAYS') {
 		// String _ids (Meteor-style) — type the collection so `_id` isn't ObjectId.

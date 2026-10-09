@@ -1,7 +1,8 @@
 export const ROLES = {
 	ADMINISTRATOR: 'ADMINISTRATOR',
 	ENCODER: 'ENCODER',
-	GRANT_OFFICER: 'GRANT_OFFICER'
+	GRANT_OFFICER: 'GRANT_OFFICER',
+	TAGGER: 'TAGGER'
 } as const;
 
 export type Role = (typeof ROLES)[keyof typeof ROLES];
@@ -9,7 +10,8 @@ export type Role = (typeof ROLES)[keyof typeof ROLES];
 export const ROLE_LABELS: Record<Role, string> = {
 	ADMINISTRATOR: 'Administrator',
 	ENCODER: 'Encoder',
-	GRANT_OFFICER: 'Grant Officer'
+	GRANT_OFFICER: 'Grant Officer',
+	TAGGER: 'Tagger'
 };
 
 /** Encoders (and admins) edit household details/location/dependents. */
@@ -38,5 +40,12 @@ export const canTagHouseholds = (
 export const canManageGrants = (role: string | undefined | null): boolean =>
 	role === ROLES.ADMINISTRATOR || role === ROLES.GRANT_OFFICER;
 
-export const isAdmin = (role: string | undefined | null): boolean =>
-	role === ROLES.ADMINISTRATOR;
+export const isAdmin = (role: string | undefined | null): boolean => role === ROLES.ADMINISTRATOR;
+
+/** Taggers fill in the paper Household Mapping sheet (members + services availed) for existing households. */
+export const canFillHouseholdMapping = (role: string | undefined | null): boolean =>
+	role === ROLES.ADMINISTRATOR || role === ROLES.TAGGER;
+
+/** Roles whose users can be geographically scoped (by cluster or by assigned barangays): encoders and taggers. */
+export const isScopedRole = (role: string | undefined | null): boolean =>
+	role === ROLES.ENCODER || role === ROLES.TAGGER;

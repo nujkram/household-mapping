@@ -55,7 +55,7 @@
 					<option value={c.value}>{c.label}</option>
 				{/each}
 			</select>
-			<span class="text-xs opacity-60">Encoder will only see households in this cluster.</span>
+			<span class="text-xs opacity-60">This user will only see households in this cluster.</span>
 		</label>
 	{:else}
 		<div class="space-y-2">
@@ -93,11 +93,11 @@
 
 			{#if barangayIds.length === 0}
 				<p class="text-xs text-warning-500">
-					No barangays selected — this encoder will not see any households until you assign some.
+					No barangays selected — this user will not see any households until you assign some.
 				</p>
 			{:else}
 				<span class="text-xs opacity-60">
-					Encoder will only see households in the barangays ticked above.
+					This user will only see households in the barangays ticked above.
 				</span>
 			{/if}
 		</div>

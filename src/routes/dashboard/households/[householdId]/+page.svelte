@@ -21,10 +21,16 @@
 		labelFor
 	} from '$lib/utils/householdOptions';
 	import { submitJson } from '$lib/utils/apiHelper';
-	import { canEditHouseholds, canManageGrants, canTagHouseholds } from '$lib/utils/roles';
+	import {
+		canEditHouseholds,
+		canFillHouseholdMapping,
+		canManageGrants,
+		canTagHouseholds
+	} from '$lib/utils/roles';
 	import { serviceCentavos, formatCentavos } from '$lib/utils/money';
 	import { page } from '$app/stores';
 	import Update from '$lib/components/forms/household/Update.svelte';
+	import HouseholdMappingForm from '$lib/components/forms/mapping/HouseholdMappingForm.svelte';
 	import AddGrant from '$lib/components/forms/household/AddGrant.svelte';
 	import ServiceCreate from '$lib/components/forms/service/Create.svelte';
 	import ServiceUpdate from '$lib/components/forms/service/Update.svelte';
@@ -37,6 +43,8 @@
 	$: canEdit = canEditHouseholds(userRole);
 	$: canGrant = canManageGrants(userRole);
 	$: canTag = canTagHouseholds(userRole, $page.data.encoderTagging);
+	// Taggers fill in the Household Mapping sheet (members + services availed).
+	$: canFillMapping = canFillHouseholdMapping(userRole);
 
 	// Aggregation results are driver `Document`s; this app uses string _ids.
 	$: household = data.household as any;
@@ -47,6 +55,15 @@
 	const drawerUpdate: DrawerSettings = {
 		id: 'updateHousehold',
 		width: 'w-[280px] md:w-full',
+		padding: 'p-4',
+		rounded: 'rounded-xl',
+		position: 'right'
+	};
+
+	// The mapping sheet is an 11-column table: full width at every breakpoint.
+	const drawerMapping: DrawerSettings = {
+		id: 'householdMapping',
+		width: 'w-full',
 		padding: 'p-4',
 		rounded: 'rounded-xl',
 		position: 'right'
@@ -77,6 +94,12 @@
 	};
 
 	$: services = (data.services as unknown as Service[]) || [];
+	// The paper form's "STATUS (PWD/SC)" column: those two survey categories only.
+	const statusLabels = (dep: any): string =>
+		(dep.categories || [])
+			.filter((c: string) => c === 'SC' || c === 'PWD')
+			.map((c: string) => labelFor(CATEGORY_OPTIONS, c))
+			.join(', ');
 	let selectedService: Service | undefined;
 
 	// Multi-family dwelling composition (derived from dependent links).
@@ -235,8 +258,7 @@
 	const initMap = (): void => {
 		const lat = Number.parseFloat(household.latitude);
 		const lng = Number.parseFloat(household.longitude);
-		const location =
-			Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : defaultLocation;
+		const location = Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : defaultLocation;
 
 		map = new google.maps.Map(mapElement, {
 			center: location,
@@ -267,6 +289,11 @@
 	}
 
 	onMount(async () => {
+		// Deep link from the households list ("Mapping" button) opens the sheet.
+		if (canFillMapping && $page.url.searchParams.get('mapping') === '1') {
+			drawerStore.open(drawerMapping);
+		}
+
 		const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
 		if (!apiKey) {
 			showToast(toastStore, 'Google Maps API key is missing', false);
@@ -299,6 +326,11 @@
 			<div class="btn-group variant-filled">
 				{#if canEdit}
 					<button type="button" on:click={() => drawerStore.open(drawerUpdate)}>Edit</button>
+				{/if}
+				{#if canFillMapping}
+					<button type="button" on:click={() => drawerStore.open(drawerMapping)}>
+						Household Mapping
+					</button>
 				{/if}
 				<button type="button" on:click={() => goto('/dashboard/households')}>Back to list</button>
 			</div>
@@ -362,6 +394,10 @@
 							<dt class="font-bold inline">Voter Status:</dt>
 							<dd class="inline">{household.isVoter ? 'Registered Voter' : 'Not Registered'}</dd>
 						</div>
+						<div>
+							<dt class="font-bold inline">Remarks:</dt>
+							<dd class="inline whitespace-pre-line">{dash(household.remarks)}</dd>
+						</div>
 						{#if household.precinct}
 							<div>
 								<dt class="font-bold inline">Precinct:</dt>
@@ -395,9 +431,7 @@
 							<dt class="font-bold inline">Barangay:</dt>
 							<dd class="inline">
 								{#if household.barangay}
-									<a
-										class="anchor"
-										href="/dashboard/barangays/{household.barangay._id}"
+									<a class="anchor" href="/dashboard/barangays/{household.barangay._id}"
 										>{household.barangay.name}</a
 									>
 								{:else}
@@ -539,8 +573,8 @@
 				<div>
 					<h2 class="h3 mb-2">Families in this Household ({subFamilies.length + 1})</h2>
 					<p class="text-sm opacity-60 mb-4">
-						These families live in the same dwelling but keep their own records, tags, and
-						grants. Link a dependent to their own household record to add one.
+						These families live in the same dwelling but keep their own records, tags, and grants.
+						Link a dependent to their own household record to add one.
 					</p>
 					<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
 						{#each subFamilies as family (family._id)}
@@ -575,7 +609,7 @@
 			<!-- Grants -->
 			<div>
 				<div class="flex flex-wrap items-center justify-between gap-2 mb-4">
-					<h2 class="h3">Grants Received ({household.grants?.length ?? 0})</h2>
+					<h2 class="h3">Services Availed / Grants Received ({household.grants?.length ?? 0})</h2>
 					{#if canGrant}
 						<button
 							class="btn btn-sm variant-filled-primary"
@@ -622,12 +656,18 @@
 				{:else}
 					<p class="opacity-60">No grants received yet.</p>
 				{/if}
+				{#if household.otherServicesAvailed}
+					<p class="mt-3 text-sm">
+						<span class="font-bold">Other services availed:</span>
+						{household.otherServicesAvailed}
+					</p>
+				{/if}
 			</div>
 
-			<!-- Services -->
+			<!-- Services (patient-service registry, grant officers) -->
 			<div>
 				<div class="flex flex-wrap items-center justify-between gap-2 mb-4">
-					<h2 class="h3">Services ({services.length})</h2>
+					<h2 class="h3">Patient Services ({services.length})</h2>
 					{#if canGrant}
 						<button
 							class="btn btn-sm variant-filled-primary"
@@ -723,13 +763,19 @@
 											{dependent.isVoter ? 'Registered Voter' : 'Not Registered'}
 										</dd>
 									</div>
+									<div>
+										<dt class="font-bold inline">Status (PWD/SC):</dt>
+										<dd class="inline">{dash(statusLabels(dependent))}</dd>
+									</div>
+									<div>
+										<dt class="font-bold inline">Remarks:</dt>
+										<dd class="inline whitespace-pre-line">{dash(dependent.remarks)}</dd>
+									</div>
 									{#if dependent.linkedHouseholdId}
 										<div>
 											<dt class="font-bold inline">Own Household:</dt>
 											<dd class="inline">
-												<a
-													class="anchor"
-													href="/dashboard/households/{dependent.linkedHouseholdId}"
+												<a class="anchor" href="/dashboard/households/{dependent.linkedHouseholdId}"
 													>View household</a
 												>
 											</dd>
@@ -768,6 +814,13 @@
 		<Update
 			data={household}
 			barangay={household.barangay || { _id: household.barangayId }}
+			{drawerStore}
+			onSuccess={() => invalidateAll()}
+		/>
+	{:else if $drawerStore.id === 'householdMapping'}
+		<HouseholdMappingForm
+			data={household}
+			barangayName={household.barangay?.name ?? ''}
 			{drawerStore}
 			onSuccess={() => invalidateAll()}
 		/>

@@ -40,6 +40,10 @@ export type Household = {
 	longitude: string;
 	tag?: 'APIN' | 'KONTRA' | 'UNTAGGED';
 	grants?: HouseholdGrant[];
+	/** Head-of-family remarks (paper form). */
+	remarks?: string;
+	/** Mapping sheet "OTHERS — specify" under Services Availed (free text). Ticked services are `grants`. */
+	otherServicesAvailed?: string;
 	updatedAt: string;
 	barangayName?: string;
 	/**
@@ -141,8 +145,26 @@ export type HouseholdGrant = {
 	grantId: string;
 	name: string;
 	year: number;
-	receivedAt: string;
+	receivedAt: string | Date;
 	grantedBy?: string;
+};
+
+/** A ticked "Services Availed" row as the Household Mapping sheet submits it. */
+export type GrantAwardInput = {
+	grantId: string;
+	/** yyyy-MM-dd, or null when the date is unknown. */
+	receivedAt: string | null;
+};
+
+/** Row 1 of the mapping sheet: the head-of-family cells. Names are editable only when creating. */
+export type MappingHeadRow = {
+	firstName: string;
+	middleName: string;
+	lastName: string;
+	gender: string;
+	dateOfBirth: string;
+	categories: string[];
+	remarks: string;
 };
 
 export type Dependents = {
@@ -157,4 +179,6 @@ export type Dependents = {
 	age?: number;
 	gender: string;
 	isVoter: boolean;
+	/** Per-member remarks (paper form). */
+	remarks?: string;
 } & Partial<import('$lib/utils/householdOptions').HouseholdSurvey>;

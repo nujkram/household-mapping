@@ -80,7 +80,10 @@ export const householdSurveySchema = z.object({
 	] as const),
 	philhealth: optionalEnum(['YES', 'NO'] as const),
 	philhealthMembershipType: optionalEnum(['ME', 'D'] as const),
-	categories: z.array(z.enum(['SC', 'PWD', 'Y', 'SP', 'PW'])).optional().default([]),
+	categories: z
+		.array(z.enum(['SC', 'PWD', 'Y', 'SP', 'PW']))
+		.optional()
+		.default([]),
 	occupationEmployment: z.boolean().optional().default(false),
 	occupationFarming: z.boolean().optional().default(false),
 	occupationFishing: z.boolean().optional().default(false),
@@ -107,6 +110,31 @@ export const SURVEY_KEYS = Object.keys(householdSurveySchema.shape);
 export const pickSurveyFields = (data: Record<string, unknown>): Record<string, unknown> =>
 	Object.fromEntries(SURVEY_KEYS.map((k) => [k, data[k]]));
 
+// --- Grant awards from the Household Mapping sheet -------------------------
+// The sheet's "Services Availed" checklist IS the grants catalog
+// (/dashboard/grants): every ticked service is saved as a grant award on the
+// household by the taggers' mapping endpoint, which resolves each grantId
+// against the catalog.
+
+const dateYmd = z
+	.string()
+	.trim()
+	.regex(/^\d{4}-\d{2}-\d{2}$/, 'must be yyyy-MM-dd');
+
+const grantAwardSchema = z.object({
+	grantId: z.string().trim().min(1, 'is required'),
+	// An untouched <input type="date"> submits '' → null (date unknown).
+	receivedAt: z.preprocess((v) => (v === '' || v === undefined ? null : v), dateYmd.nullable())
+});
+
+const grantAwardsField = z
+	.array(grantAwardSchema)
+	.optional()
+	.default([])
+	.refine((list) => new Set(list.map((g) => g.grantId)).size === list.length, {
+		message: 'must not repeat a grant'
+	});
+
 // Dependents carry the same optional survey fields as the head of household.
 const dependentSchema = z
 	.object({
@@ -119,7 +147,9 @@ const dependentSchema = z
 		fullName: z.string().optional().default(''),
 		dateOfBirth: z.string().nullable().optional(),
 		gender: z.string().optional().default('MALE'),
-		isVoter: z.boolean().optional().default(false)
+		isVoter: z.boolean().optional().default(false),
+		// Paper form "REMARKS" column.
+		remarks: optionalText
 	})
 	.extend(householdSurveySchema.shape)
 	// dependents may also carry latitude/longitude copied from a linked household
@@ -165,6 +195,51 @@ export const householdUpdateSchema = householdBaseSchema.extend({
 	// matches, the record was changed by someone else since — reject with 409.
 	expectedUpdatedAt: z.string().optional()
 });
+
+// --- Household mapping sheet (taggers) --------------------------------------
+// The paper HOUSEHOLD MAPPING sheet for an EXISTING household: the members
+// table (row 1 = head) and the Services Availed checklist. Nothing else — the
+// head's name, phone, voter flag, barangay, code, pin and tag stay the
+// encoder's/admin's.
+export const householdMappingSchema = z.object({
+	_id: z.string().min(1),
+	// Optimistic concurrency token (see householdUpdateSchema).
+	expectedUpdatedAt: z
+		.string()
+		.optional()
+		.refine((v) => !v || !Number.isNaN(new Date(v).getTime()), 'must be a valid date'),
+	// Row 1 (head): only the paper columns a tagger may fill.
+	gender: z.string().trim().optional().default('MALE'),
+	dateOfBirth: z.string().nullable().optional(),
+	categories: householdSurveySchema.shape.categories,
+	remarks: optionalText,
+	// Rows 2+: full member objects, so survey keys the encoder entered round-trip.
+	dependentDetails: z
+		.array(
+			dependentSchema.refine((d) => d.firstName.length > 0 && d.lastName.length > 0, {
+				message: 'needs a given name and surname'
+			})
+		)
+		.optional()
+		.default([]),
+	grants: grantAwardsField,
+	otherServicesAvailed: optionalUpperText
+});
+
+// Creating a household FROM the sheet (taggers): row 1's name and the barangay
+// on top of the sheet's fields. The sheet has no location — the endpoint pins
+// the barangay's coordinates unless given; phone/voter are not on the sheet.
+export const householdMappingCreateSchema = householdMappingSchema
+	.omit({ _id: true, expectedUpdatedAt: true })
+	.extend({
+		barangayId: z.string().min(1),
+		householdCode: householdBaseSchema.shape.householdCode,
+		firstName: nameField,
+		middleName: optionalNameField,
+		lastName: nameField,
+		latitude: z.string().trim().optional().default(''),
+		longitude: z.string().trim().optional().default('')
+	});
 
 // --- Grant ------------------------------------------------------------------
 
@@ -225,11 +300,15 @@ export const serviceUpdateSchema = serviceInsertSchema.extend({
 // endpoints (enforced by the central hook guard), and the enum prevents any
 // arbitrary role string from being stored.
 
-const roleField = z.enum(['ADMINISTRATOR', 'ENCODER', 'GRANT_OFFICER']);
-// Optional cluster assignment (meaningful for encoders); '' = all clusters.
-const clusterField = z.enum(['CLUSTER_1', 'CLUSTER_2', 'CLUSTER_3']).or(z.literal('')).optional().default('');
-// How an encoder is scoped. Legacy payloads omit it and default to CLUSTER, so
-// existing accounts keep behaving exactly as before.
+const roleField = z.enum(['ADMINISTRATOR', 'ENCODER', 'GRANT_OFFICER', 'TAGGER']);
+// Optional cluster assignment (encoders and taggers); '' = all clusters.
+const clusterField = z
+	.enum(['CLUSTER_1', 'CLUSTER_2', 'CLUSTER_3'])
+	.or(z.literal(''))
+	.optional()
+	.default('');
+// How an encoder/tagger is scoped. Legacy payloads omit it and default to
+// CLUSTER, so existing accounts keep behaving exactly as before.
 const scopeModeField = z.enum(['CLUSTER', 'BARANGAYS']).optional().default('CLUSTER');
 // Explicit barangay assignment, used only in BARANGAYS mode. Ids are deduped
 // here; the endpoints additionally drop any that no longer exist.
@@ -293,8 +372,7 @@ export const settingsUpdateSchema = z.object({
 /** Turn a ZodError into a 400 JSON response with a readable message. */
 export const badRequest = (error: z.ZodError): Response => {
 	const message =
-		error.issues
-			.map((i) => `${i.path.join('.') || 'body'} ${i.message}`)
-			.join('; ') || 'Invalid input';
+		error.issues.map((i) => `${i.path.join('.') || 'body'} ${i.message}`).join('; ') ||
+		'Invalid input';
 	return json({ status: 'Error', error: message }, { status: 400 });
 };

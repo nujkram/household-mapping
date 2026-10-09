@@ -7,11 +7,17 @@
 	import type { Household, Barangay } from '$lib/utils/types';
 	import Create from '$lib/components/forms/household/Create.svelte';
 	import Update from '$lib/components/forms/household/Update.svelte';
+	import HouseholdMappingForm from '$lib/components/forms/mapping/HouseholdMappingForm.svelte';
 	import AddGrant from '$lib/components/forms/household/AddGrant.svelte';
 	import ServiceCreate from '$lib/components/forms/service/Create.svelte';
 	import TableSkeleton from '$lib/components/common/TableSkeleton.svelte';
 	import { debounce } from '$lib/utils/debounce';
-	import { canEditHouseholds, canManageGrants, canTagHouseholds } from '$lib/utils/roles';
+	import {
+		canEditHouseholds,
+		canFillHouseholdMapping,
+		canManageGrants,
+		canTagHouseholds
+	} from '$lib/utils/roles';
 	import { CLUSTER_OPTIONS, clusterLabel, resolveClusterId } from '$lib/utils/clusters';
 	import { formatCentavos } from '$lib/utils/money';
 
@@ -62,10 +68,7 @@
 
 	const onClusterChange = () => {
 		// Clear a barangay that's no longer in the chosen cluster.
-		if (
-			selectedBarangay &&
-			!barangayChoices.some((b) => b._id === selectedBarangay)
-		) {
+		if (selectedBarangay && !barangayChoices.some((b) => b._id === selectedBarangay)) {
 			selectedBarangay = '';
 		}
 		applyFilters();
@@ -78,6 +81,10 @@
 	$: canEdit = canEditHouseholds(userRole);
 	$: canTag = canTagHouseholds(userRole, $page.data.encoderTagging);
 	$: canGrant = canManageGrants(userRole);
+	// Taggers fill in the Household Mapping sheet (members + services availed).
+	$: canFillMapping = canFillHouseholdMapping(userRole);
+	// Barangays a tagger may create in (already cluster-scoped by the loader).
+	$: mappingBarangays = (data.barangays as unknown as Barangay[]) ?? [];
 	// Column count for skeleton/empty colspans: Name, Barangay, Phone, Last
 	// Updated, Actions (5) + Tag (admin, or encoder when enabled) + Grants &
 	// Services (grant managers).
@@ -97,6 +104,15 @@
 	const drawerCreate: DrawerSettings = {
 		id: 'createHousehold',
 		width: 'w-[280px] md:w-full',
+		padding: 'p-4',
+		rounded: 'rounded-xl',
+		position: 'right'
+	};
+
+	// Taggers create a household from the mapping sheet (an 11-column table).
+	const drawerMappingCreate: DrawerSettings = {
+		id: 'createMapping',
+		width: 'w-full',
 		padding: 'p-4',
 		rounded: 'rounded-xl',
 		position: 'right'
@@ -181,9 +197,7 @@
 	// refetch for a one-field change.
 	async function handleSetTag(household: Household, tag: 'APIN' | 'KONTRA' | 'UNTAGGED') {
 		const previousTag = household.tag;
-		data.households = data.households.map((h) =>
-			h._id === household._id ? { ...h, tag } : h
-		);
+		data.households = data.households.map((h) => (h._id === household._id ? { ...h, tag } : h));
 
 		try {
 			const response = await fetch('/api/admin/household/set-tag', {
@@ -202,11 +216,7 @@
 			data.households = data.households.map((h) =>
 				h._id === household._id ? { ...h, tag: previousTag } : h
 			);
-			showToast(
-				toastStore,
-				error instanceof Error ? error.message : 'Failed to update tag',
-				false
-			);
+			showToast(toastStore, error instanceof Error ? error.message : 'Failed to update tag', false);
 			console.error('Error setting tag:', error);
 		}
 	}
@@ -248,6 +258,13 @@
 			<h1 class="h3">Household Management</h1>
 			{#if canEdit}
 				<button class="btn variant-filled-primary" on:click={() => drawerStore.open(drawerCreate)}>
+					Add Household
+				</button>
+			{:else if canFillMapping}
+				<button
+					class="btn variant-filled-primary"
+					on:click={() => drawerStore.open(drawerMappingCreate)}
+				>
 					Add Household
 				</button>
 			{/if}
@@ -356,7 +373,8 @@
 						<tr>
 							<td colspan={colCount} class="text-center py-8 opacity-60">
 								{#if !hasFilters && data.total === 0}
-									No households yet. Click “Add Household” to create one.
+									No households yet.{#if canEdit || canFillMapping}
+										Click “Add Household” to create one.{/if}
 								{:else}
 									No households match your search or filters.
 								{/if}
@@ -486,6 +504,14 @@
 										>
 											View
 										</a>
+										{#if canFillMapping}
+											<a
+												class="btn btn-sm variant-filled-secondary"
+												href="/dashboard/households/{household._id}?mapping=1"
+											>
+												Mapping
+											</a>
+										{/if}
 										{#if canEdit}
 											<button
 												class="btn btn-sm variant-filled"
@@ -537,6 +563,13 @@
 		<Update
 			data={selectedHousehold}
 			barangay={selectedHouseholdBarangay}
+			{drawerStore}
+			onSuccess={refreshList}
+		/>
+	{:else if $drawerStore.id === 'createMapping'}
+		<HouseholdMappingForm
+			data={null}
+			barangays={mappingBarangays}
 			{drawerStore}
 			onSuccess={refreshList}
 		/>

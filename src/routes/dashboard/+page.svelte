@@ -53,6 +53,7 @@
 	const isAdminView = user.role === ROLES.ADMINISTRATOR;
 	const isEncoderView = user.role === ROLES.ENCODER;
 	const isGrantOfficerView = user.role === ROLES.GRANT_OFFICER;
+	const isTaggerView = user.role === ROLES.TAGGER;
 
 	// Chart series: fixed order, colors follow the entity (validated variants).
 	const tagSeries = (['APIN', 'KONTRA', 'UNTAGGED'] as const).map((t) => ({
@@ -265,7 +266,7 @@
 			</div>
 		</div>
 	{:else}
-		<!-- Simple, task-focused landing for Encoders and Grant Officers -->
+		<!-- Simple, task-focused landing for Encoders, Taggers and Grant Officers -->
 		<div class="card p-6 space-y-6">
 			<header>
 				<h1 class="h2">Welcome, {user.firstName || user.name}!</h1>
@@ -274,6 +275,8 @@
 						{encoderTagging
 							? 'Your job: keep household records correct and tagged.'
 							: 'Your job: keep household records complete and correct.'}
+					{:else if isTaggerView}
+						Your job: fill in the Household Mapping sheet for each household.
 					{:else}
 						Your job: award grants to the right households.
 					{/if}
@@ -289,7 +292,10 @@
 			<!-- Big task buttons -->
 			<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
 				{#if isEncoderView}
-					<a href="/dashboard/households" class="card p-8 variant-filled-primary text-center hover:brightness-110">
+					<a
+						href="/dashboard/households"
+						class="card p-8 variant-filled-primary text-center hover:brightness-110"
+					>
 						<p class="text-4xl mb-2">🏠</p>
 						<p class="text-xl font-bold text-white">Households</p>
 						<p class="text-white/80 mt-1">
@@ -298,18 +304,36 @@
 								: 'Edit details, location & dependents'}
 						</p>
 					</a>
-					<a href="/dashboard/map" class="card p-8 variant-filled-secondary text-center hover:brightness-110">
+					<a
+						href="/dashboard/map"
+						class="card p-8 variant-filled-secondary text-center hover:brightness-110"
+					>
 						<p class="text-4xl mb-2">🗺️</p>
 						<p class="text-xl font-bold text-white">Map</p>
 						<p class="text-white/80 mt-1">See every household on the map</p>
 					</a>
+				{:else if isTaggerView}
+					<a
+						href="/dashboard/households"
+						class="card p-8 variant-filled-primary text-center hover:brightness-110"
+					>
+						<p class="text-4xl mb-2">📋</p>
+						<p class="text-xl font-bold text-white">Households</p>
+						<p class="text-white/80 mt-1">Open a household and press “Mapping”</p>
+					</a>
 				{:else}
-					<a href="/dashboard/households" class="card p-8 variant-filled-primary text-center hover:brightness-110">
+					<a
+						href="/dashboard/households"
+						class="card p-8 variant-filled-primary text-center hover:brightness-110"
+					>
 						<p class="text-4xl mb-2">🏠</p>
 						<p class="text-xl font-bold text-white">Award Grants</p>
 						<p class="text-white/80 mt-1">Find a household and press “+ Grant”</p>
 					</a>
-					<a href="/dashboard/grants" class="card p-8 variant-filled-secondary text-center hover:brightness-110">
+					<a
+						href="/dashboard/grants"
+						class="card p-8 variant-filled-secondary text-center hover:brightness-110"
+					>
 						<p class="text-4xl mb-2">💰</p>
 						<p class="text-xl font-bold text-white">Grants</p>
 						<p class="text-white/80 mt-1">
@@ -331,10 +355,21 @@
 						{/if}
 						<li>Press <strong>Update</strong> to fix names, location, or dependents.</li>
 						<li>Press <strong>Add Household</strong> to register a new family.</li>
+					{:else if isTaggerView}
+						<li>Press <strong>Households</strong> above.</li>
+						<li>Find the family using the search box.</li>
+						<li>Press <strong>Mapping</strong> to open the Household Mapping sheet.</li>
+						<li>
+							Fill in the members table, tick the services availed, then press
+							<strong>Save Mapping</strong>.
+						</li>
 					{:else}
 						<li>Press <strong>Award Grants</strong> above.</li>
 						<li>Find a family using the search box.</li>
-						<li>Press <strong>+ Grant</strong> to give a grant, or <strong>+ Service</strong> to record a patient service.</li>
+						<li>
+							Press <strong>+ Grant</strong> to give a grant, or <strong>+ Service</strong> to record
+							a patient service.
+						</li>
 						<li>To add a new grant program, go to <strong>Grants</strong>.</li>
 					{/if}
 				</ol>

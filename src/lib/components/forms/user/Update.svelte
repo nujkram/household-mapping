@@ -87,9 +87,10 @@
 			<option value="ADMINISTRATOR">Administrator — full access</option>
 			<option value="ENCODER">Encoder — edits households (tagging set in Settings)</option>
 			<option value="GRANT_OFFICER">Grant Officer — awards grants</option>
+			<option value="TAGGER">Tagger — fills in Household Mapping sheets</option>
 		</select>
 	</label>
-	{#if user.role === 'ENCODER'}
+	{#if user.role === 'ENCODER' || user.role === 'TAGGER'}
 		<ScopeFields bind:scopeMode bind:cluster={user.cluster} bind:barangayIds {barangays} />
 	{/if}
 	<hr class="mt-4" />
