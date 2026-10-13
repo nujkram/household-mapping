@@ -3,7 +3,7 @@ import type { RequestHandler } from './$types';
 import clientPromise from '$lib/server/mongo';
 import { canTagHouseholds } from '$lib/utils/roles';
 import { encoderMayAccessBarangay } from '$lib/server/clusterAccess';
-import { encoderTaggingEnabled } from '$lib/server/settings';
+import { getSettings } from '$lib/server/settings';
 
 // Define the valid tag values
 type HouseholdTag = 'APIN' | 'KONTRA' | 'UNTAGGED';
@@ -14,15 +14,20 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 		// Real HTTP status codes so callers' `response.ok` checks work.
 		//
-		// The hook guard now admits ENCODERs to this route, so THIS check is the
-		// only thing enforcing the app-wide switch. Read it FRESH — never from the
-		// TTL cache — so an encoder can't slip a write through in the window after
-		// an admin turns tagging off. Admins bypass the flag entirely.
+		// The hook guard admits ENCODERs and TAGGERs to this route, so THIS check is
+		// the only thing enforcing the app-wide switches. Read them FRESH — never from
+		// the TTL cache — so nobody can slip a write through in the window after an
+		// admin turns tagging off. Admins bypass the flags entirely.
 		//
 		// `!user ||` short-circuits ahead of the read, so an anonymous request
 		// never costs a findOne.
 		const user = locals.user;
-		if (!user || !canTagHouseholds(user.role, await encoderTaggingEnabled({ fresh: true }))) {
+		const settings = user ? await getSettings({ fresh: true }) : null;
+		if (
+			!user ||
+			!settings ||
+			!canTagHouseholds(user.role, settings.encoderTagging, settings.taggerTagging)
+		) {
 			return json({ error: 'Household tagging is not enabled for your role' }, { status: 403 });
 		}
 
@@ -41,7 +46,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		const db = await clientPromise();
 		const collection = db.collection('households');
 
-		// A cluster-scoped encoder may only tag households inside their cluster.
+		// A cluster-scoped encoder or tagger may only tag households inside their scope.
 		const target = await collection.findOne(
 			{ _id: householdId },
 			{ projection: { barangayId: 1 } }

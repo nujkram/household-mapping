@@ -16,7 +16,11 @@
 	// re-derives it, matching the other call sites. Note that markers already
 	// drawn keep their colors until the page remounts — getMarkerIcon() runs
 	// once per marker at creation.
-	$: showTags = canTagHouseholds($page.data.user?.role, $page.data.encoderTagging);
+	$: showTags = canTagHouseholds(
+		$page.data.user?.role,
+		$page.data.encoderTagging,
+		$page.data.taggerTagging
+	);
 	const NEUTRAL_COLOR = '#3B82F6';
 
 	let map: google.maps.Map;
@@ -186,8 +190,8 @@
 <div class="container mx-auto p-4">
 	{#if data.migrationNeeded}
 		<aside class="card variant-filled-warning p-3 mb-4">
-			Some households aren't showing on the map yet — the location migration hasn't been run.
-			An administrator should run <code class="code">npm run backfill</code> once.
+			Some households aren't showing on the map yet — the location migration hasn't been run. An
+			administrator should run <code class="code">npm run backfill</code> once.
 		</aside>
 	{/if}
 

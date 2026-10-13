@@ -14,13 +14,19 @@ export type AppSettings = {
 	 * encoder sees no tags at all.
 	 */
 	encoderTagging: boolean;
+	/**
+	 * Taggers may VIEW and SET the political tag, under the same rules as
+	 * `encoderTagging`: off by default, admins unaffected, one flag gates both
+	 * viewing and editing.
+	 */
+	taggerTagging: boolean;
 };
 
 /**
  * How the app behaves before an admin has ever saved settings: tagging is
  * administrator-only.
  */
-const DEFAULTS: AppSettings = { encoderTagging: false };
+const DEFAULTS: AppSettings = { encoderTagging: false, taggerTagging: false };
 
 /**
  * How long a cached copy is trusted.
@@ -55,11 +61,14 @@ let inFlight: Promise<AppSettings> | null = null;
 const readFromDb = async (): Promise<AppSettings> => {
 	const db = await clientPromise();
 	const doc = await db
-		.collection<{ _id: string; encoderTagging?: boolean }>('settings')
-		.findOne({ _id: SETTINGS_ID }, { projection: { encoderTagging: 1 } });
+		.collection<{ _id: string; encoderTagging?: boolean; taggerTagging?: boolean }>('settings')
+		.findOne({ _id: SETTINGS_ID }, { projection: { encoderTagging: 1, taggerTagging: 1 } });
 	// Missing document (first run), missing field, or a legacy non-boolean all
 	// resolve to the safe default.
-	return { encoderTagging: doc?.encoderTagging === true };
+	return {
+		encoderTagging: doc?.encoderTagging === true,
+		taggerTagging: doc?.taggerTagging === true
+	};
 };
 
 /**
@@ -104,6 +113,10 @@ export const getSettings = async (opts: { fresh?: boolean } = {}): Promise<AppSe
 /** Convenience for the permission check. Reads through the cache by default. */
 export const encoderTaggingEnabled = async (opts?: { fresh?: boolean }): Promise<boolean> =>
 	(await getSettings(opts)).encoderTagging;
+
+/** Same, for the TAGGER role. */
+export const taggerTaggingEnabled = async (opts?: { fresh?: boolean }): Promise<boolean> =>
+	(await getSettings(opts)).taggerTagging;
 
 /**
  * Drop this instance's cached copy. Called immediately after a settings write

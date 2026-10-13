@@ -21,7 +21,11 @@
 	// Admins always; encoders only while the app-wide encoderTagging setting is
 	// on. When false the Tag <select> isn't rendered, so no `tag` is submitted
 	// and the server leaves the stored value untouched.
-	$: canTag = canTagHouseholds($page.data.user?.role, $page.data.encoderTagging);
+	$: canTag = canTagHouseholds(
+		$page.data.user?.role,
+		$page.data.encoderTagging,
+		$page.data.taggerTagging
+	);
 
 	const isFocused = true;
 	let isSubmitting = false;
@@ -327,7 +331,13 @@
 			</label>
 			<label class="label">
 				<span>Last Name</span>
-				<input class="input" type="text" placeholder="Dela Cruz" bind:value={data.lastName} required />
+				<input
+					class="input"
+					type="text"
+					placeholder="Dela Cruz"
+					bind:value={data.lastName}
+					required
+				/>
 			</label>
 			<label class="label">
 				<span>Phone</span>

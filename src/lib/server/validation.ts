@@ -358,14 +358,20 @@ export const resetPasswordSchema = z.object({
 
 // --- App settings -----------------------------------------------------------
 
-export const settingsUpdateSchema = z.object({
-	/**
-	 * May ENCODERs view and set the political tag? Admins always may.
-	 * Strict boolean, not z.coerce.boolean() — so a stringy `"false"` is a 400
-	 * rather than a silent `true`.
-	 */
-	encoderTagging: z.boolean()
-});
+export const settingsUpdateSchema = z
+	.object({
+		/**
+		 * May ENCODERs / TAGGERs view and set the political tag? Admins always may.
+		 * Strict booleans, not z.coerce.boolean() — so a stringy `"false"` is a 400
+		 * rather than a silent `true`. Each is optional so one switch can be saved
+		 * without resending the other; the endpoint writes only what was sent.
+		 */
+		encoderTagging: z.boolean().optional(),
+		taggerTagging: z.boolean().optional()
+	})
+	.refine((s) => s.encoderTagging !== undefined || s.taggerTagging !== undefined, {
+		message: 'needs at least one setting'
+	});
 
 // --- Helper -----------------------------------------------------------------
 

@@ -32,7 +32,13 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			{ _id: SETTINGS_ID },
 			{
 				$set: {
-					encoderTagging: parsed.data.encoderTagging,
+					// Only the switches that were sent; the other keeps its stored value.
+					...(parsed.data.encoderTagging !== undefined
+						? { encoderTagging: parsed.data.encoderTagging }
+						: {}),
+					...(parsed.data.taggerTagging !== undefined
+						? { taggerTagging: parsed.data.taggerTagging }
+						: {}),
 					updatedAt: now,
 					updatedBy: locals.user._id
 				},
@@ -45,10 +51,13 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		// converge within the settings TTL.
 		invalidateSettings();
 
-		return json({
-			status: 'Success',
-			message: `Encoder tagging ${parsed.data.encoderTagging ? 'enabled' : 'disabled'}`
-		});
+		const changed = [
+			parsed.data.encoderTagging !== undefined &&
+				`Encoder tagging ${parsed.data.encoderTagging ? 'enabled' : 'disabled'}`,
+			parsed.data.taggerTagging !== undefined &&
+				`Tagger tagging ${parsed.data.taggerTagging ? 'enabled' : 'disabled'}`
+		].filter(Boolean);
+		return json({ status: 'Success', message: changed.join('; ') });
 	} catch (error) {
 		console.error('Error saving app settings:', error);
 		return json({ status: 'Error', error: 'Failed to save settings' }, { status: 500 });

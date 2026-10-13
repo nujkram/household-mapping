@@ -43,12 +43,22 @@
 		households: HouseholdCoordinate[];
 		tagCounts: { APIN: number; KONTRA: number; UNTAGGED: number };
 		encoderTagging: boolean;
+		taggerTagging: boolean;
 		activeGrants: number;
 		analytics: Analytics | null;
 	};
 
 	export let data: PageData;
-	const { user, barangays, households, tagCounts, encoderTagging, activeGrants, analytics } = data;
+	const {
+		user,
+		barangays,
+		households,
+		tagCounts,
+		encoderTagging,
+		taggerTagging,
+		activeGrants,
+		analytics
+	} = data;
 
 	const isAdminView = user.role === ROLES.ADMINISTRATOR;
 	const isEncoderView = user.role === ROLES.ENCODER;
@@ -276,14 +286,16 @@
 							? 'Your job: keep household records correct and tagged.'
 							: 'Your job: keep household records complete and correct.'}
 					{:else if isTaggerView}
-						Your job: fill in the Household Mapping sheet for each household.
+						{taggerTagging
+							? 'Your job: fill in the Household Mapping sheet for each household, and tag it.'
+							: 'Your job: fill in the Household Mapping sheet for each household.'}
 					{:else}
 						Your job: award grants to the right households.
 					{/if}
 				</p>
 			</header>
 
-			{#if isEncoderView && encoderTagging && tagCounts.UNTAGGED > 0}
+			{#if ((isEncoderView && encoderTagging) || (isTaggerView && taggerTagging)) && tagCounts.UNTAGGED > 0}
 				<p class="opacity-70">
 					{tagCounts.UNTAGGED} of {totalHouseholds} households still need a tag.
 				</p>
@@ -358,6 +370,9 @@
 					{:else if isTaggerView}
 						<li>Press <strong>Households</strong> above.</li>
 						<li>Find the family using the search box.</li>
+						{#if taggerTagging}
+							<li>Press the colored tag button to set APIN, KONTRA, or UNTAGGED.</li>
+						{/if}
 						<li>Press <strong>Mapping</strong> to open the Household Mapping sheet.</li>
 						<li>
 							Fill in the members table, tick the services availed, then press

@@ -18,6 +18,9 @@ const GRANT_MANAGERS: Role[] = [ROLES.ADMINISTRATOR, ROLES.GRANT_OFFICER];
 const MAPPING_FILLERS: Role[] = [ROLES.ADMINISTRATOR, ROLES.TAGGER];
 // Everyone who links member rows to existing household records.
 const HOUSEHOLD_LINKERS: Role[] = [ROLES.ADMINISTRATOR, ROLES.ENCODER, ROLES.TAGGER];
+// Everyone who may reach the tag endpoint; whether they may ACTUALLY tag is the
+// app-wide encoderTagging / taggerTagging settings, enforced inside the handler.
+const TAG_SETTERS: Role[] = [ROLES.ADMINISTRATOR, ROLES.ENCODER, ROLES.TAGGER];
 
 // Route permissions, most specific prefix first — the first match wins.
 // Anything under /dashboard or /api/admin not listed here falls back to
@@ -32,7 +35,7 @@ const ROUTE_ROLES: [prefix: string, roles: Role[]][] = [
 	['/api/admin/household/grant', GRANT_MANAGERS],
 	// Encoders are admitted here; whether they may ACTUALLY tag depends on the
 	// app-wide encoderTagging setting, enforced inside the handler.
-	['/api/admin/household/set-tag', HOUSEHOLD_EDITORS],
+	['/api/admin/household/set-tag', TAG_SETTERS],
 	['/api/admin/household/insert', HOUSEHOLD_EDITORS],
 	['/api/admin/household/update', HOUSEHOLD_EDITORS],
 	['/api/admin/household/list', HOUSEHOLD_LINKERS],

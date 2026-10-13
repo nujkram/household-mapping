@@ -5,7 +5,7 @@ import { ROLES } from '$lib/utils/roles';
 import { CLUSTERS, resolveClusterId } from '$lib/utils/clusters';
 import { NUMERIC_STRING } from '$lib/utils/geo';
 import clientPromise from '$lib/server/mongo';
-import { encoderTaggingEnabled } from '$lib/server/settings';
+import { getSettings } from '$lib/server/settings';
 
 type HouseholdDocument = {
 	latitude: string;
@@ -30,8 +30,8 @@ export const load: PageServerLoad = async ({ locals }) => {
 	const db = await clientPromise();
 	const Household = db.collection('households');
 
-	// Gates the encoder-facing tagging copy below. Admins always tag.
-	const encoderTagging = await encoderTaggingEnabled();
+	// Gates the encoder- and tagger-facing tagging copy below. Admins always tag.
+	const { encoderTagging, taggerTagging } = await getSettings();
 
 	// Tag counts are cheap and useful to every role.
 	// TODO: not cluster-scoped — a cluster-bound encoder sees global counts.
@@ -70,6 +70,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 			user: locals.user as SessionUser,
 			tagCounts,
 			encoderTagging,
+			taggerTagging,
 			activeGrants,
 			barangays: [] as Barangay[],
 			households: [] as HouseholdCoordinate[],
@@ -82,52 +83,55 @@ export const load: PageServerLoad = async ({ locals }) => {
 	const Grant = db.collection('grants');
 
 	// Everything the KPI tiles and charts need, in one pass over households.
-	const facetPromise = Household.aggregate([
-		{ $match: { isActive: true } },
-		{
-			$facet: {
-				total: [{ $count: 'count' }],
-				// Families living inside another household's dwelling.
-				subFamilies: [
-					{ $match: { parentHouseholdId: { $exists: true, $nin: [null, ''] } } },
-					{ $count: 'count' }
-				],
-				voters: [{ $match: { isVoter: true } }, { $count: 'count' }],
-				located: [
-					// Only count coordinates that actually parse to numbers (matches the
-					// map), so 'NaN'/'abc'/'' don't inflate the KPI.
-					{
-						$match: {
-							latitude: { $regex: NUMERIC_STRING },
-							longitude: { $regex: NUMERIC_STRING }
+	const facetPromise = Household.aggregate(
+		[
+			{ $match: { isActive: true } },
+			{
+				$facet: {
+					total: [{ $count: 'count' }],
+					// Families living inside another household's dwelling.
+					subFamilies: [
+						{ $match: { parentHouseholdId: { $exists: true, $nin: [null, ''] } } },
+						{ $count: 'count' }
+					],
+					voters: [{ $match: { isVoter: true } }, { $count: 'count' }],
+					located: [
+						// Only count coordinates that actually parse to numbers (matches the
+						// map), so 'NaN'/'abc'/'' don't inflate the KPI.
+						{
+							$match: {
+								latitude: { $regex: NUMERIC_STRING },
+								longitude: { $regex: NUMERIC_STRING }
+							}
+						},
+						{ $count: 'count' }
+					],
+					perBarangayTag: [
+						{
+							$group: {
+								_id: { barangayId: '$barangayId', tag: { $ifNull: ['$tag', 'UNTAGGED'] } },
+								count: { $sum: 1 }
+							}
 						}
-					},
-					{ $count: 'count' }
-				],
-				perBarangayTag: [
-					{
-						$group: {
-							_id: { barangayId: '$barangayId', tag: { $ifNull: ['$tag', 'UNTAGGED'] } },
-							count: { $sum: 1 }
-						}
-					}
-				],
-				reached: [{ $match: { 'grants.0': { $exists: true } } }, { $count: 'count' }],
-				awardsTotal: [{ $unwind: '$grants' }, { $count: 'count' }],
-				awardsByMonth: [
-					{ $unwind: '$grants' },
-					{ $match: { 'grants.receivedAt': { $type: 'date' } } },
-					{
-						$group: {
-							_id: { $dateToString: { format: '%Y-%m', date: '$grants.receivedAt' } },
-							count: { $sum: 1 }
-						}
-					},
-					{ $sort: { _id: 1 } }
-				]
+					],
+					reached: [{ $match: { 'grants.0': { $exists: true } } }, { $count: 'count' }],
+					awardsTotal: [{ $unwind: '$grants' }, { $count: 'count' }],
+					awardsByMonth: [
+						{ $unwind: '$grants' },
+						{ $match: { 'grants.receivedAt': { $type: 'date' } } },
+						{
+							$group: {
+								_id: { $dateToString: { format: '%Y-%m', date: '$grants.receivedAt' } },
+								count: { $sum: 1 }
+							}
+						},
+						{ $sort: { _id: 1 } }
+					]
+				}
 			}
-		}
-	], { allowDiskUse: true }).toArray();
+		],
+		{ allowDiskUse: true }
+	).toArray();
 
 	const [barangays, householdsWithCoords, facets, activeGrants, totalGrants] = await Promise.all([
 		Barangay.find().toArray(),
@@ -151,7 +155,14 @@ export const load: PageServerLoad = async ({ locals }) => {
 	);
 	const perBarangay = new Map<
 		string,
-		{ name: string; clusterId: string | null; APIN: number; KONTRA: number; UNTAGGED: number; total: number }
+		{
+			name: string;
+			clusterId: string | null;
+			APIN: number;
+			KONTRA: number;
+			UNTAGGED: number;
+			total: number;
+		}
 	>();
 	for (const g of (facet.perBarangayTag ?? []) as {
 		_id: { barangayId: string; tag: string };
@@ -195,10 +206,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 	// Awards per month for the last 12 months, zero-filled so the line is honest
 	// about quiet months.
 	const monthCounts = new Map(
-		((facet.awardsByMonth ?? []) as { _id: string; count: number }[]).map((m) => [
-			m._id,
-			m.count
-		])
+		((facet.awardsByMonth ?? []) as { _id: string; count: number }[]).map((m) => [m._id, m.count])
 	);
 	const awardsByMonth: { month: string; label: string; count: number }[] = [];
 	const now = new Date();
@@ -258,6 +266,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 		households: householdCoordinates,
 		tagCounts,
 		encoderTagging,
+		taggerTagging,
 		activeGrants,
 		analytics
 	};

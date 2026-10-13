@@ -22,18 +22,22 @@ export const canEditHouseholds = (role: string | undefined | null): boolean =>
  * Who may view and set the political tag (APIN/KONTRA/UNTAGGED).
  *
  * Administrators always may. Encoders may only while the app-wide
- * `encoderTagging` setting is on. Grant Officers never may.
+ * `encoderTagging` setting is on, and Taggers only while `taggerTagging` is
+ * on. Grant Officers never may.
  *
- * `encoderTagging` defaults to false and is compared with `=== true`, so a
- * caller that forgets the second argument — or passes an untyped value out of
- * `$page.data` — fails CLOSED (encoders lose tagging) rather than open.
+ * Both flags default to false and are compared with `=== true`, so a caller
+ * that forgets an argument — or passes an untyped value out of `$page.data` —
+ * fails CLOSED (that role loses tagging) rather than open.
  */
 export const canTagHouseholds = (
 	role: string | undefined | null,
-	encoderTagging: boolean | undefined | null = false
+	encoderTagging: boolean | undefined | null = false,
+	taggerTagging: boolean | undefined | null = false
 ): boolean => {
 	if (role === ROLES.ADMINISTRATOR) return true;
-	return role === ROLES.ENCODER && encoderTagging === true;
+	if (role === ROLES.ENCODER) return encoderTagging === true;
+	if (role === ROLES.TAGGER) return taggerTagging === true;
+	return false;
 };
 
 /** Grant officers (and admins) manage the grant catalog and award grants. */

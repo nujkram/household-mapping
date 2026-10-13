@@ -13,7 +13,11 @@
 	// This component had no role guard — it was safe only because /dashboard/
 	// barangays is ADMIN_ONLY. The endpoint it posts to is no longer admin-only,
 	// so guard the UI here too rather than rely on the page prefix.
-	$: canTag = canTagHouseholds($page.data.user?.role, $page.data.encoderTagging);
+	$: canTag = canTagHouseholds(
+		$page.data.user?.role,
+		$page.data.encoderTagging,
+		$page.data.taggerTagging
+	);
 
 	const toastStore = getToastStore();
 	let selectedHousehold: any = null;
@@ -100,20 +104,12 @@
 	<!-- Search input -->
 	<div class="input-group input-group-divider grid-cols-[auto_1fr_auto]">
 		<div class="input-group-shim">🔍</div>
-		<input
-			type="search"
-			bind:value={searchInput}
-			placeholder="Search by name..."
-			class="input"
-		/>
+		<input type="search" bind:value={searchInput} placeholder="Search by name..." class="input" />
 	</div>
 
 	<!-- Tag filter -->
 	{#if canTag}
-		<select
-			bind:value={selectedTag}
-			class="select"
-		>
+		<select bind:value={selectedTag} class="select">
 			<option value="">All Tags</option>
 			<option value="APIN">APIN</option>
 			<option value="KONTRA">KONTRA</option>
@@ -160,56 +156,56 @@
 					<td>{item.dependents || ''}</td>
 					{#if canTag}
 						<td>
-						<div class="relative tag-dropdown">
-							<button
-								class="btn btn-sm {item.tag === 'UNTAGGED'
-									? 'variant-filled-surface'
-									: item.tag === 'APIN'
-										? 'variant-filled-success'
-										: 'variant-filled-error'}"
-								on:click|stopPropagation={() => {
-									selectedHousehold = item;
-									isDropdownOpen = !isDropdownOpen;
-								}}
-								disabled={isProcessing}
-							>
-								{isProcessing ? 'Processing...' : item.tag || 'Tag'}
-							</button>
-
-							{#if isDropdownOpen && selectedHousehold?._id === item._id}
-								<div
-									class="absolute z-50 mt-1 w-32 bg-surface-100-800-token shadow-lg rounded-lg overflow-hidden"
+							<div class="relative tag-dropdown">
+								<button
+									class="btn btn-sm {item.tag === 'UNTAGGED'
+										? 'variant-filled-surface'
+										: item.tag === 'APIN'
+											? 'variant-filled-success'
+											: 'variant-filled-error'}"
+									on:click|stopPropagation={() => {
+										selectedHousehold = item;
+										isDropdownOpen = !isDropdownOpen;
+									}}
+									disabled={isProcessing}
 								>
-									<button
-										class="w-full px-4 py-2 text-left hover:bg-surface-hover-token {item.tag ===
-										'APIN'
-											? 'bg-success-500/20'
-											: ''}"
-										on:click={() => handleSetTag(item, 'APIN')}
+									{isProcessing ? 'Processing...' : item.tag || 'Tag'}
+								</button>
+
+								{#if isDropdownOpen && selectedHousehold?._id === item._id}
+									<div
+										class="absolute z-50 mt-1 w-32 bg-surface-100-800-token shadow-lg rounded-lg overflow-hidden"
 									>
-										APIN
-									</button>
-									<button
-										class="w-full px-4 py-2 text-left hover:bg-surface-hover-token {item.tag ===
-										'KONTRA'
-											? 'bg-error-500/20'
-											: ''}"
-										on:click={() => handleSetTag(item, 'KONTRA')}
-									>
-										KONTRA
-									</button>
-									<button
-										class="w-full px-4 py-2 text-left hover:bg-surface-hover-token {item.tag ===
-										'UNTAGGED'
-											? 'bg-surface-500/20'
-											: ''}"
-										on:click={() => handleSetTag(item, 'UNTAGGED')}
-									>
-										Untag
-									</button>
-								</div>
-							{/if}
-						</div>
+										<button
+											class="w-full px-4 py-2 text-left hover:bg-surface-hover-token {item.tag ===
+											'APIN'
+												? 'bg-success-500/20'
+												: ''}"
+											on:click={() => handleSetTag(item, 'APIN')}
+										>
+											APIN
+										</button>
+										<button
+											class="w-full px-4 py-2 text-left hover:bg-surface-hover-token {item.tag ===
+											'KONTRA'
+												? 'bg-error-500/20'
+												: ''}"
+											on:click={() => handleSetTag(item, 'KONTRA')}
+										>
+											KONTRA
+										</button>
+										<button
+											class="w-full px-4 py-2 text-left hover:bg-surface-hover-token {item.tag ===
+											'UNTAGGED'
+												? 'bg-surface-500/20'
+												: ''}"
+											on:click={() => handleSetTag(item, 'UNTAGGED')}
+										>
+											Untag
+										</button>
+									</div>
+								{/if}
+							</div>
 						</td>
 					{/if}
 					<td>

@@ -42,7 +42,7 @@
 	$: userRole = $page.data.user?.role;
 	$: canEdit = canEditHouseholds(userRole);
 	$: canGrant = canManageGrants(userRole);
-	$: canTag = canTagHouseholds(userRole, $page.data.encoderTagging);
+	$: canTag = canTagHouseholds(userRole, $page.data.encoderTagging, $page.data.taggerTagging);
 	// Taggers fill in the Household Mapping sheet (members + services availed).
 	$: canFillMapping = canFillHouseholdMapping(userRole);
 

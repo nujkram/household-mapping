@@ -79,7 +79,7 @@
 	// always can). Grant Officers award grants/services.
 	$: userRole = $page.data.user?.role;
 	$: canEdit = canEditHouseholds(userRole);
-	$: canTag = canTagHouseholds(userRole, $page.data.encoderTagging);
+	$: canTag = canTagHouseholds(userRole, $page.data.encoderTagging, $page.data.taggerTagging);
 	$: canGrant = canManageGrants(userRole);
 	// Taggers fill in the Household Mapping sheet (members + services availed).
 	$: canFillMapping = canFillHouseholdMapping(userRole);
