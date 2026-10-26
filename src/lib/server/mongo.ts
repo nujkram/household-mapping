@@ -69,16 +69,75 @@ const ensureIndexes = async (db: Db): Promise<void> => {
 	];
 
 	await Promise.all(
-		specs.map(([coll, keys, opts]) =>
-			db
-				.collection(coll)
-				.createIndex(keys, opts ?? {})
-				.catch((error) => {
-					indexesEnsured = false; // allow a retry on the next cold start
-					console.error(`Failed to create index on ${coll} ${JSON.stringify(keys)}:`, error?.message);
-				})
-		)
+		specs.map(async ([coll, keys, opts]) => {
+			try {
+				if (opts?.unique) await upgradeToUnique(db, coll, keys, opts.partialFilterExpression);
+				await db.collection(coll).createIndex(keys, opts ?? {});
+			} catch (error) {
+				indexesEnsured = false; // allow a retry on the next cold start
+				console.error(
+					`Failed to create index on ${coll} ${JSON.stringify(keys)}:`,
+					(error as Error)?.message
+				);
+			}
+		})
 	);
+};
+
+/**
+ * Migration: an index that was first created WITHOUT `unique` can't be upgraded
+ * in place — MongoDB auto-names both versions the same (e.g. `name_1_year_1`)
+ * and rejects the new one with "An existing index has the same name". When we
+ * find that older non-unique index, drop it so `createIndex` can rebuild it as
+ * unique. Before dropping, check for documents that would violate uniqueness:
+ * if any exist we keep the old index (queries stay fast) and log the offending
+ * values so they can be cleaned up, then the next cold start retries.
+ */
+const upgradeToUnique = async (
+	db: Db,
+	coll: string,
+	keys: Record<string, 1 | -1>,
+	partialFilterExpression?: Record<string, unknown>
+): Promise<void> => {
+	const collection = db.collection(coll);
+	const existing = await collection
+		.listIndexes()
+		.toArray()
+		.catch((error) => {
+			// Collection doesn't exist yet — nothing to migrate.
+			if ((error as { code?: number })?.code === 26) return [];
+			throw error;
+		});
+
+	const wantedKey = JSON.stringify(keys);
+	const stale = existing.find((ix) => JSON.stringify(ix.key) === wantedKey && !ix.unique);
+	if (!stale) return;
+
+	// Group the same way the unique index would compare values (missing → null).
+	const groupId = Object.fromEntries(
+		Object.keys(keys).map((k) => [k.replace(/\./g, '_'), `$${k}`])
+	);
+	const dupes = await collection
+		.aggregate([
+			...(partialFilterExpression ? [{ $match: partialFilterExpression }] : []),
+			{ $group: { _id: groupId, count: { $sum: 1 } } },
+			{ $match: { count: { $gt: 1 } } },
+			{ $limit: 10 }
+		])
+		.toArray();
+
+	if (dupes.length) {
+		throw new Error(
+			`cannot make index "${stale.name}" unique; duplicate values exist: ` +
+				dupes.map((d) => `${JSON.stringify(d._id)} ×${d.count}`).join(', ')
+		);
+	}
+
+	await collection.dropIndex(stale.name).catch((error) => {
+		// Another instance starting at the same time already dropped it — fine.
+		if ((error as { code?: number })?.code !== 27) throw error;
+	});
+	console.info(`Dropped non-unique index ${coll}.${stale.name}; rebuilding it as unique.`);
 };
 
 const connectToDatabase = async (): Promise<Db> => {
